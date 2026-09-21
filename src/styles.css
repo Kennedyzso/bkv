@@ -40,6 +40,19 @@ body {
     #f6f5f9;
 }
 
+html.modal-open {
+  overflow: hidden;
+}
+
+body.modal-open {
+  position: fixed;
+  top: var(--modal-scroll-top);
+  right: 0;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
 button,
 input,
 select {
@@ -1573,6 +1586,7 @@ h3 {
   align-items: flex-end;
   justify-content: center;
   padding: 0;
+  overscroll-behavior: contain;
   background: rgba(31, 26, 66, 0.4);
   animation: fade-in 150ms ease both;
 }
@@ -1586,6 +1600,7 @@ h3 {
   border-radius: 22px 22px 0 0;
   background: #fff;
   box-shadow: 0 -12px 45px rgba(33, 27, 83, 0.22);
+  overscroll-behavior: contain;
   animation: modal-in 220ms ease both;
 }
 

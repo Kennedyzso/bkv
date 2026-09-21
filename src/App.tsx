@@ -2153,6 +2153,25 @@ function SearchRouteResult({
   )
 }
 
+function useBodyScrollLock(): void {
+  useEffect(() => {
+    const scrollY = window.scrollY
+    const body = document.body
+    const documentElement = document.documentElement
+
+    body.style.setProperty('--modal-scroll-top', `-${scrollY}px`)
+    body.classList.add('modal-open')
+    documentElement.classList.add('modal-open')
+
+    return () => {
+      body.classList.remove('modal-open')
+      documentElement.classList.remove('modal-open')
+      body.style.removeProperty('--modal-scroll-top')
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
+}
+
 function Modal({
   title,
   onClose,
@@ -2162,6 +2181,8 @@ function Modal({
   onClose: () => void
   children: ReactNode
 }) {
+  useBodyScrollLock()
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
