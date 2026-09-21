@@ -1,7 +1,7 @@
 {
-  "name": "BKV Figyelő",
-  "short_name": "BKV Figyelő",
-  "description": "Saját BKV indulási táblád a BKK FUTÁR élő adataival.",
+  "name": "BKK Figyelő",
+  "short_name": "BKK Figyelő",
+  "description": "Saját BKK indulási táblád a BKK FUTÁR élő adataival.",
   "lang": "hu",
   "start_url": "./",
   "scope": "./",
@@ -10,10 +10,10 @@
   "theme_color": "#312783",
   "icons": [
     {
-      "src": "./icon.svg",
+      "src": "./bkk-logo.jpg",
       "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/jpeg",
+      "purpose": "any"
     }
   ]
 }

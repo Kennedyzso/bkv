@@ -1,4 +1,4 @@
-# BKV Figyelő
+# BKK Figyelő
 
 Mobilra optimalizált React PWA a budapesti járatok következő érkezéseinek
 figyelésére. A felhasználó csoportokat hozhat létre, csoportonként járat +
@@ -12,8 +12,10 @@ láthatja.
 - a következő három érkezés megjelenítése figyelt járatonként;
 - összesített, időrendbe rendezett nézet;
 - járatonként csoportosított nézet;
+- járatok elrejtése és visszakapcsolása lenyíló jelölőnégyzet-listából;
 - valós idejű és menetrend szerinti idők megkülönböztetése;
 - konfiguráció mentése a böngésző localStorage-ába;
+- járatcsoportok JSON-exportja és -importja API-kulcs megosztása nélkül;
 - mobil-first felület BKK/BKV színkódokkal;
 - telepíthető PWA és GitHub Pages deploy workflow.
 
@@ -29,9 +31,9 @@ Az API-kulcsot kétféleképpen lehet megadni:
 1. a `.env.local` fájlban `VITE_BKK_API_KEY` változóként;
 2. az alkalmazás Beállítások oldalán.
 
-A `.env.local` fájl nem kerülhet commitba. A kulcs nélkül az alkalmazás
-felülete és a csoportkezelés használható, de a BKK API keresése és az élő
-érkezések nem működnek.
+A `.env.local` fájl nem kerülhet commitba. A kulcs nélkül az alkalmazás csak a
+Beállítások oldalon használható; a BKK API keresése és az élő érkezések mellett
+a csoportkezelés is kulcsot igényel.
 
 ## Build és deploy
 

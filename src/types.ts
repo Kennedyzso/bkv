@@ -28,11 +28,13 @@ export interface CommuteGroup {
   id: string
   name: string
   connections: SavedConnection[]
+  hiddenConnectionIds?: string[]
 }
 
 export interface AppSettings {
   apiKey: string
   refreshInterval: number
+  arrivalsPerConnection: number
 }
 
 export interface AppState {

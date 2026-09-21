@@ -4,8 +4,11 @@ export const BKK_API_BASE_URL =
   'https://futar.bkk.hu/api/query/v1/ws/otp/api/where'
 
 export const DEFAULT_REFRESH_INTERVAL = 30
+export const DEFAULT_ARRIVALS_PER_CONNECTION = 3
 
 export const REFRESH_INTERVAL_OPTIONS = [15, 30, 60, 120]
+export const ARRIVALS_PER_CONNECTION_OPTIONS = [3, 5, 10]
+export const ARRIVALS_LOAD_MORE_STEP = 3
 
 export const MODE_COLORS: Record<string, string> = {
   BUS: '#009fe3',
@@ -38,6 +41,7 @@ export const DEFAULT_APP_STATE = {
   settings: {
     apiKey: '',
     refreshInterval: DEFAULT_REFRESH_INTERVAL,
+    arrivalsPerConnection: DEFAULT_ARRIVALS_PER_CONNECTION,
   },
 }
 

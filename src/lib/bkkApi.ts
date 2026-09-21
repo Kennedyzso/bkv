@@ -167,7 +167,7 @@ export async function getStopsForRoute(
   route?.variants?.forEach((variant, variantIndex) => {
     const directionLabel =
       variant.headsign || variant.name || `Irány ${variantIndex + 1}`
-    const directionKey = variant.direction ?? String(variantIndex)
+    const directionKey = `${variant.direction ?? String(variantIndex)}:${normalizeSearchText(directionLabel)}`
     if (!directionIds.has(directionKey)) {
       directions.push({ id: directionKey, label: directionLabel })
       directionIds.add(directionKey)

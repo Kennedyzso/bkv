@@ -7,35 +7,23 @@ import {
   useState,
 } from 'react'
 import type {
-  ChangeEvent,
   CSSProperties,
   FormEvent,
   ReactNode,
 } from 'react'
 import {
   getArrivalsForConnection,
-  filterRoutesByQuery,
   getRouteName,
-  getRouteForStopTime,
   getRoutes,
   getStopsForRoute,
   getStopName,
   getStops,
-  getTripRouteIdsForStop,
   hasApiKey,
   searchTransit,
 } from './lib/bkkApi'
 import { BkkApiError } from './lib/bkkApi'
+import { createId, loadState, saveState } from './lib/storage'
 import {
-  createId,
-  loadState,
-  parseGroups,
-  saveState,
-  serializeGroups,
-} from './lib/storage'
-import {
-  ARRIVALS_LOAD_MORE_STEP,
-  ARRIVALS_PER_CONNECTION_OPTIONS,
   getModeColor,
   getModeLabel,
   REFRESH_INTERVAL_OPTIONS,
@@ -47,13 +35,11 @@ import type {
   GroupDepartures,
   RouteReference,
   RouteStopOption,
-  RouteStopsResult,
   SavedConnection,
   TransportMode,
 } from './types'
 
 type ViewMode = 'all' | 'grouped'
-type GroupedSortMode = 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
 
 type IconName =
@@ -62,10 +48,7 @@ type IconName =
   | 'chevron'
   | 'clock'
   | 'close'
-  | 'download'
   | 'dots'
-  | 'eye'
-  | 'edit'
   | 'plus'
   | 'refresh'
   | 'search'
@@ -73,7 +56,6 @@ type IconName =
   | 'spark'
   | 'trash'
   | 'train'
-  | 'upload'
 
 function Icon({
   name,
@@ -93,7 +75,6 @@ function Icon({
       </>
     ),
     close: <path d="m6 6 12 12M18 6 6 18" />,
-    download: <path d="M12 4v11m-4-4 4 4 4-4M5 20h14" />,
     dots: (
       <>
         <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -101,26 +82,9 @@ function Icon({
         <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
       </>
     ),
-    eye: (
-      <>
-        <path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z" />
-        <circle cx="12" cy="12" r="2.5" />
-      </>
-    ),
-    edit: (
-      <>
-        <path d="m4 16.5-.8 3.8 3.8-.8L18.2 8.3a2.1 2.1 0 0 0-3-3L4 16.5Z" />
-        <path d="m13.8 6.2 3 3" />
-      </>
-    ),
     plus: <path d="M12 5v14M5 12h14" />,
     refresh: (
-      <>
-        <path d="M21 12a9 9 0 0 0-15.3-6.4L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 15.3 6.4L21 16" />
-        <path d="M21 21v-5h-5" />
-      </>
+      <path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11m0 0V6m0 5h5m-5 1a8.1 8.1 0 0 0 14.9 3L21 13m0 0v5m0-5h-5" />
     ),
     search: (
       <>
@@ -129,12 +93,10 @@ function Icon({
       </>
     ),
     settings: (
-      <path
-        d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98L14.5 2.42C14.47 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.5.42L9.12 5.07c-.61.25-1.17.58-1.69.98l-2.49-1c-.23-.08-.48 0-.6.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.08.48 0 .6-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"
-        fill="currentColor"
-        fillRule="evenodd"
-        stroke="none"
-      />
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.6v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.5-1H6.3v-2.6h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2H15v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2V14h-.2a1.7 1.7 0 0 0-1.5 1Z" />
+      </>
     ),
     spark: (
       <>
@@ -153,7 +115,6 @@ function Icon({
         <path d="M8 17.5 6 21m10-3.5 2 3.5M5 12.5h14M8 7.5h.01M16 7.5h.01" />
       </>
     ),
-    upload: <path d="M12 20V9m-4 4 4-4 4 4M5 4h14" />,
   }
 
   return (
@@ -181,23 +142,14 @@ function App() {
   )
   const [viewMode, setViewMode] = useState<ViewMode>('all')
   const [modal, setModal] = useState<ModalType>(null)
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [departures, setDepartures] = useState<Record<string, GroupDepartures>>(
     {},
   )
-  const [additionalArrivalsByGroup, setAdditionalArrivalsByGroup] = useState<
-    Record<string, number>
-  >({})
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [now, setNow] = useState(() => Date.now())
-  const [isPageVisible, setIsPageVisible] = useState(
-    () =>
-      typeof document === 'undefined' ||
-      document.visibilityState === 'visible',
-  )
-  const refreshInFlight = useRef(new Set<string>())
+  const refreshInFlight = useRef(false)
 
   const activeGroup = useMemo(
     () =>
@@ -221,25 +173,8 @@ function App() {
     return () => window.clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsPageVisible(document.visibilityState === 'visible')
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () =>
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
-
   const refreshAll = useCallback(async () => {
-    if (appState.groups.length === 0) {
-      return
-    }
-
-    const groupToRefresh =
-      appState.groups.find((group) => group.id === activeGroupId) ??
-      appState.groups[0]
-    if (!groupToRefresh || refreshInFlight.current.has(groupToRefresh.id)) {
+    if (refreshInFlight.current || appState.groups.length === 0) {
       return
     }
 
@@ -248,111 +183,93 @@ function App() {
       return
     }
 
-    refreshInFlight.current.add(groupToRefresh.id)
+    refreshInFlight.current = true
     setIsRefreshing(true)
     setFetchError('')
 
     try {
       const refreshedGroups = await Promise.all(
-        [groupToRefresh].map(async (group): Promise<GroupDepartures> => {
-          const hiddenConnectionIds = new Set(
-            group.hiddenConnectionIds ?? [],
-          )
+        appState.groups.map(async (group): Promise<GroupDepartures> => {
           const connectionResults = await Promise.all(
-            group.connections
-              .filter((connection) => !hiddenConnectionIds.has(connection.id))
-              .map(
-                async (connection): Promise<ConnectionDepartures> => {
-                  try {
-                    const [response, tripRouteIds] = await Promise.all([
-                      getArrivalsForConnection(
-                        connection,
-                        appState.settings.apiKey,
-                      ),
-                      getTripRouteIdsForStop(
-                        connection.stopId,
-                        appState.settings.apiKey,
-                      ),
-                    ])
-                    const entry = response.data?.entry
-                    const routes = getRoutes(response.data?.references)
-                    const stop = getStops(response.data?.references).find(
-                      (candidate) => candidate.id === connection.stopId,
-                    )
-                    const serverNow =
-                      response.currentTime &&
-                      response.currentTime > 100_000_000_000
-                        ? response.currentTime / 1000
-                        : Date.now() / 1000
-                    const arrivals = (entry?.stopTimes ?? [])
-                      .map((stopTime): Arrival | null => {
-                        const timestamp =
-                          stopTime.predictedArrivalTime ??
-                          stopTime.arrivalTime ??
-                          stopTime.predictedDepartureTime ??
-                          stopTime.departureTime
+            group.connections.map(
+              async (connection): Promise<ConnectionDepartures> => {
+                try {
+                  const response = await getArrivalsForConnection(
+                    connection,
+                    appState.settings.apiKey,
+                  )
+                  const entry = response.data?.entry
+                  const route = getRoutes(response.data?.references).find(
+                    (candidate) => candidate.id === connection.routeId,
+                  )
+                  const stop = getStops(response.data?.references).find(
+                    (candidate) => candidate.id === connection.stopId,
+                  )
+                  const serverNow =
+                    response.currentTime && response.currentTime > 100_000_000_000
+                      ? response.currentTime / 1000
+                      : Date.now() / 1000
+                  const arrivals = (entry?.stopTimes ?? [])
+                    .map((stopTime): Arrival | null => {
+                      const timestamp =
+                        stopTime.predictedArrivalTime ??
+                        stopTime.arrivalTime ??
+                        stopTime.predictedDepartureTime ??
+                        stopTime.departureTime
 
-                        if (!timestamp || timestamp < serverNow - 15) {
-                          return null
-                        }
+                      if (!timestamp || timestamp < serverNow - 15) {
+                        return null
+                      }
 
-                        const realtime =
-                          stopTime.predictedArrivalTime !== undefined ||
-                          stopTime.predictedDepartureTime !== undefined
+                      const realtime =
+                        stopTime.predictedArrivalTime !== undefined ||
+                        stopTime.predictedDepartureTime !== undefined
 
-                        const route = getRouteForStopTime(
-                          stopTime,
-                          routes,
-                          connection.routeId,
-                          tripRouteIds,
-                        )
+                      return {
+                        id: `${connection.id}-${stopTime.tripId}`,
+                        connectionId: connection.id,
+                        routeId: connection.routeId,
+                        routeName: route
+                          ? getRouteName(route)
+                          : connection.routeName,
+                        routeType: route?.type ?? connection.routeType,
+                        routeColor:
+                          route?.style?.color ??
+                          route?.color ??
+                          connection.routeColor,
+                        routeTextColor:
+                          route?.style?.icon?.textColor ??
+                          route?.textColor ??
+                          connection.routeTextColor,
+                        stopId: connection.stopId,
+                        stopName: stop ? getStopName(stop) : connection.stopName,
+                        destination:
+                          stopTime.stopHeadsign ||
+                          route?.description?.split('|')[1]?.trim() ||
+                          'Célállomás nélkül',
+                        timestamp,
+                        minutes: Math.max(
+                          0,
+                          Math.round((timestamp - serverNow) / 60),
+                        ),
+                        isRealtime: realtime,
+                        uncertain: stopTime.uncertain ?? false,
+                      }
+                    })
+                    .filter((arrival): arrival is Arrival => arrival !== null)
+                    .sort((a, b) => a.timestamp - b.timestamp)
+                    .slice(0, 3)
 
-                        return {
-                          id: `${connection.id}-${stopTime.tripId}`,
-                          connectionId: connection.id,
-                          routeId: route?.id ?? connection.routeId,
-                          routeName: route
-                            ? getRouteName(route)
-                            : connection.routeName,
-                          routeType: route?.type ?? connection.routeType,
-                          routeColor:
-                            route?.style?.color ??
-                            route?.color ??
-                            connection.routeColor,
-                          routeTextColor:
-                            route?.style?.icon?.textColor ??
-                            route?.textColor ??
-                            connection.routeTextColor,
-                          stopId: connection.stopId,
-                          stopName: stop
-                            ? getStopName(stop)
-                            : connection.stopName,
-                          destination:
-                            stopTime.stopHeadsign ||
-                            route?.description?.split('|')[1]?.trim() ||
-                            'Célállomás nélkül',
-                          timestamp,
-                          minutes: Math.max(
-                            0,
-                            Math.round((timestamp - serverNow) / 60),
-                          ),
-                          isRealtime: realtime,
-                          uncertain: stopTime.uncertain ?? false,
-                        }
-                      })
-                      .filter((arrival): arrival is Arrival => arrival !== null)
-                      .sort((a, b) => a.timestamp - b.timestamp)
-
-                    return { connection, arrivals }
-                  } catch (error) {
-                    return {
-                      connection,
-                      arrivals: [],
-                      error: getErrorMessage(error),
-                    }
+                  return { connection, arrivals }
+                } catch (error) {
+                  return {
+                    connection,
+                    arrivals: [],
+                    error: getErrorMessage(error),
                   }
-                },
-              ),
+                }
+              },
+            ),
           )
 
           return {
@@ -381,29 +298,19 @@ function App() {
     } catch (error) {
       setFetchError(getErrorMessage(error))
     } finally {
-      refreshInFlight.current.delete(groupToRefresh.id)
-      setIsRefreshing(refreshInFlight.current.size > 0)
+      refreshInFlight.current = false
+      setIsRefreshing(false)
     }
-  }, [activeGroupId, appState.groups, appState.settings.apiKey])
+  }, [appState.groups, appState.settings.apiKey])
 
   useEffect(() => {
-    if (
-      isPageVisible &&
-      appState.groups.length > 0 &&
-      hasApiKey(appState.settings.apiKey)
-    ) {
+    if (appState.groups.length > 0 && hasApiKey(appState.settings.apiKey)) {
       void refreshAll()
     }
-  }, [
-    appState.groups.length,
-    appState.settings.apiKey,
-    isPageVisible,
-    refreshAll,
-  ])
+  }, [appState.groups.length, appState.settings.apiKey, refreshAll])
 
   useEffect(() => {
     if (
-      !isPageVisible ||
       appState.groups.length === 0 ||
       !hasApiKey(appState.settings.apiKey)
     ) {
@@ -419,7 +326,6 @@ function App() {
     appState.groups.length,
     appState.settings.apiKey,
     appState.settings.refreshInterval,
-    isPageVisible,
     refreshAll,
   ])
 
@@ -430,55 +336,6 @@ function App() {
       ...current,
       settings: { ...current.settings, ...settings },
     }))
-  }
-
-  function exportGroups(): void {
-    if (appState.groups.length === 0) {
-      return
-    }
-
-    const blob = new Blob([serializeGroups(appState.groups)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
-
-    link.href = url
-    link.download = `bkv-figyelo-csoportok-${date}.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-
-  async function importGroups(file: File): Promise<number> {
-    const importedGroups = parseGroups(await file.text())
-
-    setAppState((current) => ({
-      ...current,
-      groups: [...current.groups, ...importedGroups],
-    }))
-    setActiveGroupId(importedGroups[0].id)
-
-    return importedGroups.length
-  }
-
-  function loadMoreArrivals(groupId: string): void {
-    setAdditionalArrivalsByGroup((current) => ({
-      ...current,
-      [groupId]: (current[groupId] ?? 0) + ARRIVALS_LOAD_MORE_STEP,
-    }))
-  }
-
-  function openGroupModal(groupId: string | null = null): void {
-    setEditingGroupId(groupId)
-    setModal('group')
-  }
-
-  function closeGroupModal(): void {
-    setEditingGroupId(null)
-    setModal(null)
   }
 
   function createGroup(name: string): void {
@@ -494,28 +351,6 @@ function App() {
     }))
     setActiveGroupId(group.id)
     setModal(null)
-  }
-
-  function saveGroup(name: string): void {
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      return
-    }
-
-    if (editingGroupId) {
-      setAppState((current) => ({
-        ...current,
-        groups: current.groups.map((group) =>
-          group.id === editingGroupId
-            ? { ...group, name: trimmedName }
-            : group,
-        ),
-      }))
-      closeGroupModal()
-      return
-    }
-
-    createGroup(trimmedName)
   }
 
   function addConnection(connection: SavedConnection): boolean {
@@ -545,32 +380,6 @@ function App() {
     return true
   }
 
-  function toggleConnectionVisibility(
-    groupId: string,
-    connectionId: string,
-  ): void {
-    setAppState((current) => ({
-      ...current,
-      groups: current.groups.map((group) => {
-        if (group.id !== groupId) {
-          return group
-        }
-
-        const hiddenConnectionIds = new Set(group.hiddenConnectionIds ?? [])
-        if (hiddenConnectionIds.has(connectionId)) {
-          hiddenConnectionIds.delete(connectionId)
-        } else {
-          hiddenConnectionIds.add(connectionId)
-        }
-
-        return {
-          ...group,
-          hiddenConnectionIds: Array.from(hiddenConnectionIds),
-        }
-      }),
-    }))
-  }
-
   function removeConnection(connectionId: string): void {
     if (!activeGroup) {
       return
@@ -584,9 +393,6 @@ function App() {
               ...group,
               connections: group.connections.filter(
                 (connection) => connection.id !== connectionId,
-              ),
-              hiddenConnectionIds: group.hiddenConnectionIds?.filter(
-                (hiddenId) => hiddenId !== connectionId,
               ),
             }
           : group,
@@ -611,28 +417,22 @@ function App() {
       delete next[groupId]
       return next
     })
-    setAdditionalArrivalsByGroup((current) => {
-      const next = { ...current }
-      delete next[groupId]
-      return next
-    })
   }
 
   const activeDepartures = activeGroup
     ? departures[activeGroup.id]
     : undefined
-  const isApiKeyMissing = !hasApiKey(appState.settings.apiKey)
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <img
-              alt="BKK"
-              className="brand-logo"
-              src={`${import.meta.env.BASE_URL}bkk-logo.jpg`}
-            />
+            <div className="brand-mark" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
             <div>
               <div className="brand-name">BKK Figyelő</div>
               <div className="brand-caption">Indulás előtt egy pillantás</div>
@@ -653,22 +453,13 @@ function App() {
         {settingsOpen ? (
           <SettingsView
             apiKey={appState.settings.apiKey}
-            arrivalsPerConnection={appState.settings.arrivalsPerConnection}
-            groups={appState.groups}
             onApiKeyChange={(apiKey) => updateSettings({ apiKey })}
-            onArrivalsPerConnectionChange={(arrivalsPerConnection) =>
-              updateSettings({ arrivalsPerConnection })
-            }
             onClose={() => setSettingsOpen(false)}
-            onExportGroups={exportGroups}
-            onImportGroups={importGroups}
             onRefreshIntervalChange={(refreshInterval) =>
               updateSettings({ refreshInterval })
             }
             refreshInterval={appState.settings.refreshInterval}
           />
-        ) : isApiKeyMissing ? (
-          <ApiKeyGate onOpenSettings={() => setSettingsOpen(true)} />
         ) : (
           <>
             <section className="intro-row">
@@ -691,7 +482,7 @@ function App() {
               <GroupTabs
                 activeGroupId={activeGroup?.id}
                 groups={appState.groups}
-                onAdd={() => openGroupModal()}
+                onAdd={() => setModal('group')}
                 onSelect={setActiveGroupId}
               />
             )}
@@ -716,22 +507,21 @@ function App() {
               </div>
             )}
 
+            {!hasApiKey(appState.settings.apiKey) && appState.groups.length > 0 && (
+              <ApiKeyNotice onOpenSettings={() => setSettingsOpen(true)} />
+            )}
+
             {appState.groups.length === 0 ? (
-              <EmptyDashboard onAdd={() => openGroupModal()} />
+              <EmptyDashboard onAdd={() => setModal('group')} />
             ) : activeGroup ? (
               <GroupDashboard
                 departures={activeDepartures}
                 group={activeGroup}
-                arrivalsPerConnection={appState.settings.arrivalsPerConnection}
-                additionalArrivals={additionalArrivalsByGroup[activeGroup.id] ?? 0}
                 isRefreshing={isRefreshing}
                 now={now}
                 onAddConnection={() => setModal('connection')}
                 onDeleteConnection={removeConnection}
                 onDeleteGroup={() => removeGroup(activeGroup.id)}
-                onEditGroup={() => openGroupModal(activeGroup.id)}
-                onLoadMoreArrivals={() => loadMoreArrivals(activeGroup.id)}
-                onToggleConnectionVisibility={toggleConnectionVisibility}
                 onViewModeChange={setViewMode}
                 viewMode={viewMode}
               />
@@ -746,20 +536,10 @@ function App() {
         <span>Csak ezen az eszközön tárolva</span>
       </footer>
 
-      {!isApiKeyMissing && modal === 'group' && (
-        <GroupModal
-          initialName={
-            editingGroupId
-              ? appState.groups.find((group) => group.id === editingGroupId)
-                  ?.name ?? ''
-              : ''
-          }
-          isEditing={editingGroupId !== null}
-          onClose={closeGroupModal}
-          onSave={saveGroup}
-        />
+      {modal === 'group' && (
+        <GroupModal onClose={() => setModal(null)} onSave={createGroup} />
       )}
-      {!isApiKeyMissing && modal === 'connection' && (
+      {modal === 'connection' && (
         <ConnectionModal
           apiKey={appState.settings.apiKey}
           existingConnections={activeGroup?.connections ?? []}
@@ -841,110 +621,46 @@ function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-function ApiKeyGate({ onOpenSettings }: { onOpenSettings: () => void }) {
+function ApiKeyNotice({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
-    <section className="empty-dashboard api-key-gate">
-      <div className="empty-group-icon api-key-gate-icon">
-        <Icon name="settings" size={24} />
+    <div className="api-key-banner">
+      <div className="api-key-banner-icon">
+        <Icon name="settings" size={18} />
       </div>
-      <p className="eyebrow">BKK FUTÁR kapcsolat</p>
-      <h2>Először add meg az API-kulcsot</h2>
-      <p className="empty-copy">
-        Az alkalmazás használatához szükség van a BKK FUTÁR API-kulcsodra.
-        Beállítás nélkül nem lehet csoportot vagy járatot hozzáadni.
-      </p>
-      <button className="primary-button" onClick={onOpenSettings} type="button">
-        <Icon name="settings" size={17} />
-        Beállítások megnyitása
+      <div>
+        <strong>Kapcsolódj a BKK élő adataihoz</strong>
+        <p>A járatok érkezéséhez API-kulcs szükséges.</p>
+      </div>
+      <button onClick={onOpenSettings} type="button">
+        Beállítás
         <Icon name="arrow" size={16} />
       </button>
-    </section>
+    </div>
   )
-}
-
-function getAllArrivalsInWindow(
-  connections: ConnectionDepartures[],
-  arrivalsPerConnection: number,
-): Arrival[] {
-  const referenceArrivals = connections.flatMap((result) =>
-    result.arrivals.slice(0, arrivalsPerConnection),
-  )
-
-  if (referenceArrivals.length === 0) {
-    return []
-  }
-
-  const firstTimestamp = Math.min(
-    ...referenceArrivals.map((arrival) => arrival.timestamp),
-  )
-  const lastTimestamp = Math.max(
-    ...referenceArrivals.map((arrival) => arrival.timestamp),
-  )
-
-  return connections
-    .flatMap((result) => result.arrivals)
-    .filter(
-      (arrival) =>
-        arrival.timestamp >= firstTimestamp &&
-        arrival.timestamp <= lastTimestamp,
-    )
-    .sort((a, b) => a.timestamp - b.timestamp)
 }
 
 function GroupDashboard({
   group,
   departures,
-  arrivalsPerConnection,
-  additionalArrivals,
   viewMode,
   now,
   isRefreshing,
   onAddConnection,
   onDeleteConnection,
   onDeleteGroup,
-  onEditGroup,
-  onLoadMoreArrivals,
-  onToggleConnectionVisibility,
   onViewModeChange,
 }: {
   group: CommuteGroup
   departures?: GroupDepartures
-  arrivalsPerConnection: number
-  additionalArrivals: number
   viewMode: ViewMode
   now: number
   isRefreshing: boolean
   onAddConnection: () => void
   onDeleteConnection: (connectionId: string) => void
   onDeleteGroup: () => void
-  onEditGroup: () => void
-  onLoadMoreArrivals: () => void
-  onToggleConnectionVisibility: (
-    groupId: string,
-    connectionId: string,
-  ) => void
   onViewModeChange: (viewMode: ViewMode) => void
 }) {
   const hasData = departures !== undefined
-  const [groupedSortMode, setGroupedSortMode] =
-    useState<GroupedSortMode>('earliest')
-  const hiddenConnectionIds = new Set(group.hiddenConnectionIds ?? [])
-  const visibleDepartures = (departures?.connections ?? []).filter(
-    (result) => !hiddenConnectionIds.has(result.connection.id),
-  )
-  const visibleArrivalsLimit = arrivalsPerConnection + additionalArrivals
-  const visibleConnections = visibleDepartures.map((result) => ({
-    ...result,
-    arrivals: result.arrivals.slice(0, visibleArrivalsLimit),
-  }))
-  const visibleAllArrivals = getAllArrivalsInWindow(
-    visibleDepartures,
-    visibleArrivalsLimit,
-  )
-  const hasMoreArrivals =
-    visibleDepartures.some(
-      (result) => result.arrivals.length > visibleArrivalsLimit,
-    ) ?? false
 
   return (
     <section className="group-dashboard">
@@ -953,14 +669,6 @@ function GroupDashboard({
           <p className="eyebrow">Aktív csoport</p>
           <div className="group-title-row">
             <h2>{group.name}</h2>
-            <button
-              aria-label="Csoport nevének szerkesztése"
-              className="subtle-icon-button"
-              onClick={onEditGroup}
-              type="button"
-            >
-              <Icon name="edit" size={17} />
-            </button>
             <button
               aria-label="Csoport törlése"
               className="subtle-icon-button danger-on-hover"
@@ -990,7 +698,7 @@ function GroupDashboard({
           <h3>Ez a csoport még üres</h3>
           <p>
             Válassz egy járatot és egy megállót. Ezután mindig látni fogod a
-            következő {arrivalsPerConnection} érkezést.
+            következő három érkezést.
           </p>
           <button className="secondary-button" onClick={onAddConnection} type="button">
             <Icon name="plus" size={17} />
@@ -1022,56 +730,25 @@ function GroupDashboard({
             </button>
           </div>
 
-          <ConnectionVisibilityFilter
-            connections={group.connections}
-            hiddenConnectionIds={hiddenConnectionIds}
-            onToggle={(connectionId) =>
-              onToggleConnectionVisibility(group.id, connectionId)
-            }
-          />
-
           <DataStatus
             departures={departures}
             hasData={hasData}
             isRefreshing={isRefreshing}
           />
 
-          {hasData && visibleDepartures.length === 0 ? (
-            <div className="no-arrivals">
-              <div className="no-arrivals-icon">
-                <Icon name="eye" size={23} />
-              </div>
-              <strong>Minden járat el van rejtve</strong>
-              <p>
-                A lenyíló listában jelöld be azokat a járatokat, amelyeket
-                látni szeretnél.
-              </p>
-            </div>
-          ) : viewMode === 'all' ? (
+          {viewMode === 'all' ? (
             <AllArrivalsView
-              arrivals={visibleAllArrivals}
+              arrivals={departures?.allArrivals ?? []}
               isRefreshing={isRefreshing || !hasData}
               now={now}
             />
           ) : (
             <GroupedArrivalsView
-              connections={visibleConnections}
+              connections={departures?.connections ?? []}
               isRefreshing={isRefreshing || !hasData}
               now={now}
               onDeleteConnection={onDeleteConnection}
-              onSortModeChange={setGroupedSortMode}
-              sortMode={groupedSortMode}
             />
-          )}
-          {hasMoreArrivals && (
-            <button
-              className="load-more-button"
-              onClick={onLoadMoreArrivals}
-              type="button"
-            >
-              <Icon name="plus" size={17} />
-              További érkezések megjelenítése
-            </button>
           )}
         </>
       )}
@@ -1099,7 +776,7 @@ function DataStatus({
             : 'Élő indulások betöltése'}
       </span>
       <span className="status-separator">·</span>
-      <span>Automatikusan frissül, amíg nyitva van</span>
+      <span>Automatikusan frissül</span>
     </div>
   )
 }
@@ -1147,196 +824,33 @@ function AllArrivalsView({
   )
 }
 
-function ConnectionVisibilityFilter({
-  connections,
-  hiddenConnectionIds,
-  onToggle,
-}: {
-  connections: SavedConnection[]
-  hiddenConnectionIds: Set<string>
-  onToggle: (connectionId: string) => void
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const filterRef = useRef<HTMLDivElement>(null)
-  const visibleCount = connections.filter(
-    (connection) => !hiddenConnectionIds.has(connection.id),
-  ).length
-  const hiddenCount = connections.length - visibleCount
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !filterRef.current?.contains(event.target)
-      ) {
-        setIsOpen(false)
-      }
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
-
-  return (
-    <div className="connection-filter" ref={filterRef}>
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-        className={`connection-filter-toggle ${isOpen ? 'is-open' : ''}`}
-        onClick={() => setIsOpen((current) => !current)}
-        type="button"
-      >
-        <Icon name="eye" size={16} />
-        <span>Járatok megjelenítése</span>
-        <span className="connection-filter-count">
-          {visibleCount}/{connections.length}
-        </span>
-        <Icon name="chevron" size={15} />
-      </button>
-      {isOpen && (
-        <div
-          aria-label="Megjelenített járatok"
-          className="connection-filter-menu"
-          role="group"
-        >
-          <div className="connection-filter-heading">
-            <span>Válaszd ki a listában látható járatokat</span>
-            {hiddenCount > 0 && (
-              <button
-                className="connection-filter-reset"
-                onClick={() =>
-                  connections
-                    .filter((connection) =>
-                      hiddenConnectionIds.has(connection.id),
-                    )
-                    .forEach((connection) => onToggle(connection.id))
-                }
-                type="button"
-              >
-                Összes
-              </button>
-            )}
-          </div>
-          <div className="connection-filter-options">
-            {connections.map((connection) => (
-              <label
-                className="connection-filter-option"
-                key={connection.id}
-              >
-                <input
-                  checked={!hiddenConnectionIds.has(connection.id)}
-                  onChange={() => onToggle(connection.id)}
-                  type="checkbox"
-                />
-                <span
-                  aria-hidden="true"
-                  className="connection-filter-color"
-                  style={{
-                    backgroundColor: getModeColor(
-                      connection.routeType,
-                      connection.routeColor,
-                    ),
-                  }}
-                />
-                <span className="connection-filter-copy">
-                  <strong>{connection.routeName}</strong>
-                  <span>
-                    {connection.stopName}
-                    {connection.stopDirection
-                      ? ` · ${connection.stopDirection}`
-                      : ''}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function GroupedArrivalsView({
   connections,
   now,
   isRefreshing,
   onDeleteConnection,
-  onSortModeChange,
-  sortMode,
 }: {
   connections: ConnectionDepartures[]
   now: number
   isRefreshing: boolean
   onDeleteConnection: (connectionId: string) => void
-  onSortModeChange: (sortMode: GroupedSortMode) => void
-  sortMode: GroupedSortMode
 }) {
   if (isRefreshing && connections.length === 0) {
     return <LoadingList />
   }
 
-  const sortedConnections = [...connections].sort((left, right) => {
-    if (sortMode === 'routeName') {
-      return left.connection.routeName.localeCompare(
-        right.connection.routeName,
-        'hu',
-        { numeric: true, sensitivity: 'base' },
-      )
-    }
-
-    return (
-      (left.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) -
-        (right.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) ||
-      left.connection.routeName.localeCompare(right.connection.routeName, 'hu', {
-        numeric: true,
-        sensitivity: 'base',
-      })
-    )
-  })
-
   return (
-    <>
-      <div className="grouped-sort-row">
-        <label htmlFor="grouped-arrivals-sort">Rendezés</label>
-        <span className="select-wrap grouped-sort-select">
-          <select
-            id="grouped-arrivals-sort"
-            onChange={(event) =>
-              onSortModeChange(event.target.value as GroupedSortMode)
-            }
-            value={sortMode}
-          >
-            <option value="earliest">Legkorábbi</option>
-            <option value="routeName">Járat neve</option>
-          </select>
-          <Icon name="chevron" size={16} />
-        </span>
-      </div>
-      <div className="connection-list">
-        {sortedConnections.map((connectionResult) => (
-          <ConnectionCard
-            connectionResult={connectionResult}
-            isRefreshing={isRefreshing}
-            key={connectionResult.connection.id}
-            now={now}
-            onDelete={() => onDeleteConnection(connectionResult.connection.id)}
-          />
-        ))}
-      </div>
-    </>
+    <div className="connection-list">
+      {connections.map((connectionResult) => (
+        <ConnectionCard
+          connectionResult={connectionResult}
+          isRefreshing={isRefreshing}
+          key={connectionResult.connection.id}
+          now={now}
+          onDelete={() => onDeleteConnection(connectionResult.connection.id)}
+        />
+      ))}
+    </div>
   )
 }
 
@@ -1437,12 +951,8 @@ function ArrivalCard({
       <div className="arrival-details">
         <strong>{arrival.destination}</strong>
         <span>{arrival.stopName}</span>
-        <span
-          className={`arrival-mode ${
-            arrival.isRealtime ? 'is-realtime' : 'is-scheduled'
-          }`}
-        >
-          {arrival.isRealtime ? '● Valós idejű adat' : '○ Menetrend szerint'}
+        <span className="arrival-mode">
+          {arrival.isRealtime ? '● Valós idejű adat' : 'Menetrend szerint'}
           {arrival.uncertain ? ' · bizonytalan' : ''}
         </span>
       </div>
@@ -1456,12 +966,8 @@ function MiniArrival({ arrival, now }: { arrival: Arrival; now: number }) {
     <div className="mini-arrival">
       <div>
         <strong>{arrival.destination}</strong>
-        <span
-          className={`mini-arrival-status ${
-            arrival.isRealtime ? 'is-realtime' : 'is-scheduled'
-          }`}
-        >
-          {arrival.isRealtime ? '● Valós idő' : '○ Menetrend'}
+        <span className="mini-arrival-status">
+          {arrival.isRealtime ? 'Valós idő' : 'Menetrend'}
         </span>
       </div>
       <TimeDisplay arrival={arrival} now={now} compact />
@@ -1514,7 +1020,7 @@ function RouteBadge({
   return (
     <div className="route-badge" style={style}>
       <span className="route-badge-icon">
-        {type === 'TRAM' ? 'V' : type === 'SUBWAY' ? 'M' : type === 'TROLLEYBUS' ? 'TB' : 'B'}
+        {type === 'TRAM' ? 'T' : type === 'SUBWAY' ? 'M' : type === 'TROLLEYBUS' ? 'TB' : 'B'}
       </span>
       <span>{name}</span>
     </div>
@@ -1540,17 +1046,13 @@ function LoadingList() {
 }
 
 function GroupModal({
-  initialName,
-  isEditing,
   onClose,
   onSave,
 }: {
-  initialName: string
-  isEditing: boolean
   onClose: () => void
   onSave: (name: string) => void
 }) {
-  const [name, setName] = useState(initialName)
+  const [name, setName] = useState('')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1560,15 +1062,11 @@ function GroupModal({
   }
 
   return (
-    <Modal
-      onClose={onClose}
-      title={isEditing ? 'Csoport átnevezése' : 'Új csoport'}
-    >
+    <Modal onClose={onClose} title="Új csoport">
       <form className="modal-form" onSubmit={submit}>
         <p className="modal-intro">
-          {isEditing
-            ? 'Módosítsd a csoport nevét.'
-            : 'Csoportosítsd azokat a járatokat, amelyeket ugyanazon az úton használsz.'}
+          Csoportosítsd azokat a járatokat, amelyeket ugyanazon az úton
+          használsz.
         </p>
         <label className="field-label" htmlFor="group-name">
           Csoport neve
@@ -1586,7 +1084,7 @@ function GroupModal({
             Mégse
           </button>
           <button className="primary-button" disabled={!name.trim()} type="submit">
-            {isEditing ? 'Mentés' : 'Létrehozás'}
+            Létrehozás
             <Icon name="arrow" size={16} />
           </button>
         </div>
@@ -1610,8 +1108,7 @@ function ConnectionModal({
 }) {
   const [routeQuery, setRouteQuery] = useState('')
   const [routeResults, setRouteResults] = useState<RouteReference[]>([])
-  const [routeStops, setRouteStops] = useState<RouteStopsResult>()
-  const [selectedDirectionId, setSelectedDirectionId] = useState('')
+  const [routeStopOptions, setRouteStopOptions] = useState<RouteStopOption[]>([])
   const [selectedRoute, setSelectedRoute] = useState<RouteReference>()
   const [selectedStop, setSelectedStop] = useState<RouteStopOption>()
   const [searching, setSearching] = useState(false)
@@ -1620,25 +1117,23 @@ function ConnectionModal({
 
   useEffect(() => {
     if (!selectedRoute || !hasApiKey(apiKey)) {
-      setRouteStops(undefined)
-      setSelectedDirectionId('')
+      setRouteStopOptions([])
       setSelectedStop(undefined)
       setLoadingStops(false)
       return
     }
 
     let cancelled = false
-    setRouteStops(undefined)
-    setSelectedDirectionId('')
+    setRouteStopOptions([])
     setSelectedStop(undefined)
     setLoadingStops(true)
     setError('')
 
     void getStopsForRoute(selectedRoute.id, apiKey)
-      .then((result) => {
+      .then((options) => {
         if (!cancelled) {
-          setRouteStops(result)
-          if (result.directions.length === 0 || result.stops.length === 0) {
+          setRouteStopOptions(options)
+          if (options.length === 0) {
             setError('Ehhez a járathoz nem sikerült megállókat betölteni.')
           }
         }
@@ -1659,14 +1154,6 @@ function ConnectionModal({
     }
   }, [apiKey, selectedRoute])
 
-  const selectedDirectionStops = useMemo(
-    () =>
-      routeStops?.stops.filter(
-        (option) => option.directionId === selectedDirectionId,
-      ) ?? [],
-    [routeStops, selectedDirectionId],
-  )
-
   async function search(query: string) {
     if (!query.trim()) {
       return
@@ -1681,12 +1168,7 @@ function ConnectionModal({
     setError('')
     try {
       const response = await searchTransit(query, apiKey)
-      setRouteResults(
-        filterRoutesByQuery(
-          getRoutes(response.data?.references),
-          query,
-        ),
-      )
+      setRouteResults(getRoutes(response.data?.references))
     } catch (searchError) {
       setError(getErrorMessage(searchError))
     } finally {
@@ -1770,8 +1252,7 @@ function ConnectionModal({
                     isSelected={selectedRoute?.id === route.id}
                     onClick={() => {
                       setSelectedRoute(route)
-                      setRouteStops(undefined)
-                      setSelectedDirectionId('')
+                      setRouteStopOptions([])
                       setSelectedStop(undefined)
                       setError('')
                     }}
@@ -1788,28 +1269,14 @@ function ConnectionModal({
             )}
 
             {selectedRoute && (
-              <RouteDirectionSelect
-                directions={routeStops?.directions ?? []}
-                loading={loadingStops}
-                onChange={(value) => {
-                  setSelectedDirectionId(value)
-                  setSelectedStop(undefined)
-                }}
-                selectedValue={selectedDirectionId}
-              />
-            )}
-
-            {selectedRoute && selectedDirectionId && (
               <RouteStopsSelect
                 loading={loadingStops}
                 onChange={(value) =>
                   setSelectedStop(
-                    selectedDirectionStops.find(
-                      (option) => option.value === value,
-                    ),
+                    routeStopOptions.find((option) => option.value === value),
                   )
                 }
-                options={selectedDirectionStops}
+                options={routeStopOptions}
                 selectedValue={selectedStop?.value ?? ''}
               />
             )}
@@ -1877,47 +1344,6 @@ function SearchField({
           {searching ? 'Keresés…' : 'Keresés'}
         </button>
       </span>
-    </label>
-  )
-}
-
-function RouteDirectionSelect({
-  directions,
-  selectedValue,
-  loading,
-  onChange,
-}: {
-  directions: RouteStopsResult['directions']
-  selectedValue: string
-  loading: boolean
-  onChange: (value: string) => void
-}) {
-  return (
-    <label className="select-field">
-      <span className="field-label">Irány / végállomás</span>
-      {loading ? (
-        <div className="select-loading">
-          <Icon name="refresh" size={16} />
-          Irányok betöltése…
-        </div>
-      ) : directions.length === 0 ? (
-        <div className="select-empty">Nincs választható irány.</div>
-      ) : (
-        <span className="select-wrap">
-          <select
-            onChange={(event) => onChange(event.target.value)}
-            value={selectedValue}
-          >
-            <option value="">Válassz végállomást…</option>
-            {directions.map((direction) => (
-              <option key={direction.id} value={direction.id}>
-                {direction.label}
-              </option>
-            ))}
-          </select>
-          <Icon name="chevron" size={17} />
-        </span>
-      )}
     </label>
   )
 }
@@ -2013,12 +1439,6 @@ function SearchRouteResult({
   onClick: () => void
 }) {
   const color = getModeColor(route.type ?? 'BUS', route.style?.color ?? route.color)
-  const routeDescription = (route.description || route.longName)
-    ?.split('|')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' ↔ ')
-
   return (
     <button
       className={`search-result ${isSelected ? 'is-selected' : ''}`}
@@ -2032,10 +1452,7 @@ function SearchRouteResult({
         type={route.type ?? 'BUS'}
       />
       <span className="search-result-detail">
-        <span>{getModeLabel(route.type ?? 'BUS')}</span>
-        {routeDescription && (
-          <span className="search-result-route">{routeDescription}</span>
-        )}
+        {getModeLabel(route.type ?? 'BUS')}
       </span>
       {isSelected && <Icon name="check" size={17} />}
     </button>
@@ -2088,70 +1505,17 @@ function Modal({
 
 function SettingsView({
   apiKey,
-  arrivalsPerConnection,
-  groups,
   refreshInterval,
   onApiKeyChange,
-  onArrivalsPerConnectionChange,
   onRefreshIntervalChange,
   onClose,
-  onExportGroups,
-  onImportGroups,
 }: {
   apiKey: string
-  arrivalsPerConnection: number
-  groups: CommuteGroup[]
   refreshInterval: number
   onApiKeyChange: (value: string) => void
-  onArrivalsPerConnectionChange: (value: number) => void
   onRefreshIntervalChange: (value: number) => void
   onClose: () => void
-  onExportGroups: () => void
-  onImportGroups: (file: File) => Promise<number>
 }) {
-  const [activeTab, setActiveTab] = useState<'technical' | 'behavior'>(
-    'technical',
-  )
-  const [isImporting, setIsImporting] = useState(false)
-  const [transferNotice, setTransferNotice] = useState<{
-    kind: 'error' | 'success'
-    message: string
-  } | null>(null)
-  const importInputRef = useRef<HTMLInputElement>(null)
-
-  async function handleImportChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ): Promise<void> {
-    const input = event.currentTarget
-    const file = input.files?.[0]
-
-    if (!file) {
-      return
-    }
-
-    setIsImporting(true)
-    setTransferNotice(null)
-
-    try {
-      const importedCount = await onImportGroups(file)
-      setTransferNotice({
-        kind: 'success',
-        message: `${importedCount} járatcsoport sikeresen importálva.`,
-      })
-    } catch (error) {
-      setTransferNotice({
-        kind: 'error',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Az importálás nem sikerült.',
-      })
-    } finally {
-      setIsImporting(false)
-      input.value = ''
-    }
-  }
-
   return (
     <section className="settings-view">
       <div className="settings-heading">
@@ -2167,162 +1531,55 @@ function SettingsView({
         </p>
       </div>
 
-      <div className="settings-tabs" role="tablist" aria-label="Beállítások">
-        <button
-          aria-selected={activeTab === 'technical'}
-          className={activeTab === 'technical' ? 'is-active' : ''}
-          onClick={() => setActiveTab('technical')}
-          role="tab"
-          type="button"
-        >
-          Technikai beállítások
-        </button>
-        <button
-          aria-selected={activeTab === 'behavior'}
-          className={activeTab === 'behavior' ? 'is-active' : ''}
-          onClick={() => setActiveTab('behavior')}
-          role="tab"
-          type="button"
-        >
-          Működési beállítások
-        </button>
-      </div>
-
-      {activeTab === 'technical' ? (
-        <>
-          <div className="settings-card">
-            <div className="settings-card-heading">
-              <div className="settings-card-icon">
-                <Icon name="spark" size={19} />
-              </div>
-              <div>
-                <h2>BKK FUTÁR kapcsolat</h2>
-                <p>Élő érkezési és indulási adatok</p>
-              </div>
-            </div>
-            <label className="field-label" htmlFor="api-key">
-              API-kulcs
-            </label>
-            <input
-              className="text-input"
-              id="api-key"
-              onChange={(event) => onApiKeyChange(event.target.value)}
-              placeholder="Illeszd be a BKK API-kulcsot"
-              type="password"
-              value={apiKey}
-            />
-            <p className="field-help">
-              A kulcsot a böngésző localStorage-a tárolja. A GitHub Pages nem
-              tudja titkosan kezelni a frontendbe bekerülő kulcsot.
-            </p>
-          </div>
-
-          <div className="settings-card">
-            <div className="settings-card-heading">
-              <div className="settings-card-icon muted">
-                <Icon name="refresh" size={19} />
-              </div>
-              <div>
-                <h2>Automatikus frissítés</h2>
-                <p>Milyen gyakran kérjünk új adatot?</p>
-              </div>
-            </div>
-            <div className="interval-options">
-              {REFRESH_INTERVAL_OPTIONS.map((interval) => (
-                <button
-                  className={refreshInterval === interval ? 'is-active' : ''}
-                  key={interval}
-                  onClick={() => onRefreshIntervalChange(interval)}
-                  type="button"
-                >
-                  {interval} mp
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="settings-card">
-          <div className="settings-card-heading">
-            <div className="settings-card-icon muted">
-              <Icon name="train" size={19} />
-            </div>
-            <div>
-              <h2>Megjelenített indulások</h2>
-              <p>Ennyi érkezést mutassunk járatonként</p>
-            </div>
-          </div>
-          <div className="interval-options">
-            {ARRIVALS_PER_CONNECTION_OPTIONS.map((count) => (
-              <button
-                className={
-                  arrivalsPerConnection === count ? 'is-active' : ''
-                }
-                key={count}
-                onClick={() => onArrivalsPerConnectionChange(count)}
-                type="button"
-              >
-                {count} db
-              </button>
-            ))}
-          </div>
-          <p className="field-help">
-            A csoport nézetében a „További érkezések megjelenítése” gombbal
-            ennél is több találatot kérhetsz.
-          </p>
-        </div>
-      )}
-
       <div className="settings-card">
         <div className="settings-card-heading">
           <div className="settings-card-icon">
-            <Icon name="download" size={19} />
+            <Icon name="spark" size={19} />
           </div>
           <div>
-            <h2>Járatcsoportok átvitele</h2>
-            <p>Mentés fájlba vagy beolvasás másik eszközről</p>
+            <h2>BKK FUTÁR kapcsolat</h2>
+            <p>Élő érkezési és indulási adatok</p>
           </div>
         </div>
-        <div className="transfer-actions">
-          <button
-            className="secondary-button"
-            disabled={groups.length === 0}
-            onClick={onExportGroups}
-            type="button"
-          >
-            <Icon name="download" size={17} />
-            Járatok exportálása
-          </button>
-          <button
-            className="secondary-button"
-            disabled={isImporting}
-            onClick={() => importInputRef.current?.click()}
-            type="button"
-          >
-            <Icon name="upload" size={17} />
-            Járatok importálása
-          </button>
-          <input
-            ref={importInputRef}
-            accept=".json,application/json"
-            className="visually-hidden"
-            onChange={(event) => void handleImportChange(event)}
-            type="file"
-          />
-        </div>
-        {transferNotice && (
-          <p
-            aria-live="polite"
-            className={`transfer-status is-${transferNotice.kind}`}
-            role={transferNotice.kind === 'error' ? 'alert' : 'status'}
-          >
-            {transferNotice.message}
-          </p>
-        )}
+        <label className="field-label" htmlFor="api-key">
+          API-kulcs
+        </label>
+        <input
+          className="text-input"
+          id="api-key"
+          onChange={(event) => onApiKeyChange(event.target.value)}
+          placeholder="Illeszd be a BKK API-kulcsot"
+          type="password"
+          value={apiKey}
+        />
         <p className="field-help">
-          Az exportált JSON csak a csoportokat és a mentett járatokat
-          tartalmazza, az API-kulcsot nem.
+          A kulcsot a böngésző localStorage-a tárolja. A GitHub Pages nem tudja
+          titkosan kezelni a frontendbe bekerülő kulcsot.
         </p>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-card-heading">
+          <div className="settings-card-icon muted">
+            <Icon name="refresh" size={19} />
+          </div>
+          <div>
+            <h2>Automatikus frissítés</h2>
+            <p>Milyen gyakran kérjünk új adatot?</p>
+          </div>
+        </div>
+        <div className="interval-options">
+          {REFRESH_INTERVAL_OPTIONS.map((interval) => (
+            <button
+              className={refreshInterval === interval ? 'is-active' : ''}
+              key={interval}
+              onClick={() => onRefreshIntervalChange(interval)}
+              type="button"
+            >
+              {interval} mp
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="info-card">

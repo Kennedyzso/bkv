@@ -1,4 +1,7 @@
-import { DEFAULT_APP_STATE } from '../constants'
+import {
+  ARRIVALS_PER_CONNECTION_OPTIONS,
+  DEFAULT_APP_STATE,
+} from '../constants'
 import type { AppState, CommuteGroup, SavedConnection } from '../types'
 
 const STORAGE_KEY = 'bkv-watch-state-v1'
@@ -13,6 +16,22 @@ export function createId(prefix = 'id'): string {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+const GROUP_EXPORT_FORMAT = 'bkv-figyelo-groups'
+const GROUP_EXPORT_VERSION = 1
+
+export function serializeGroups(groups: CommuteGroup[]): string {
+  return JSON.stringify(
+    {
+      format: GROUP_EXPORT_FORMAT,
+      version: GROUP_EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      groups: groups.map(({ hiddenConnectionIds: _hiddenConnectionIds, ...group }) => group),
+    },
+    null,
+    2,
+  )
 }
 
 function normalizeConnection(value: unknown): SavedConnection | null {
@@ -67,6 +86,11 @@ function normalizeGroup(value: unknown): CommuteGroup | null {
         .map(normalizeConnection)
         .filter((connection): connection is SavedConnection => connection !== null)
     : []
+  const hiddenConnectionIds = Array.isArray(value.hiddenConnectionIds)
+    ? value.hiddenConnectionIds.filter(
+        (id): id is string => typeof id === 'string',
+      )
+    : undefined
 
   return {
     id: value.id,
@@ -75,7 +99,58 @@ function normalizeGroup(value: unknown): CommuteGroup | null {
         ? value.name.trim()
         : 'Új csoport',
     connections,
+    hiddenConnectionIds,
   }
+}
+
+export function parseGroups(raw: string): CommuteGroup[] {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('A kiválasztott fájl nem érvényes JSON-fájl.')
+  }
+
+  if (
+    !isRecord(parsed) ||
+    parsed.format !== GROUP_EXPORT_FORMAT ||
+    parsed.version !== GROUP_EXPORT_VERSION ||
+    !Array.isArray(parsed.groups)
+  ) {
+    throw new Error(
+      'Ez nem a BKV Figyelő által exportált járatcsoport-fájl.',
+    )
+  }
+
+  const groups = parsed.groups
+    .map(normalizeGroup)
+    .filter((group): group is CommuteGroup => group !== null)
+
+  if (groups.length === 0) {
+    throw new Error('A fájl nem tartalmaz beolvasható járatcsoportot.')
+  }
+
+  return groups.map((group) => {
+    const connectionIds = new Map(
+      group.connections.map((connection) => [
+        connection.id,
+        createId('connection'),
+      ]),
+    )
+
+    return {
+      ...group,
+      id: createId('group'),
+      connections: group.connections.map((connection) => ({
+        ...connection,
+        id: connectionIds.get(connection.id) ?? createId('connection'),
+      })),
+      hiddenConnectionIds: group.hiddenConnectionIds
+        ?.map((id) => connectionIds.get(id))
+        .filter((id): id is string => Boolean(id)),
+    }
+  })
 }
 
 export function loadState(): AppState {
@@ -118,12 +193,20 @@ export function loadState(): AppState {
       [15, 30, 60, 120].includes(savedSettings.refreshInterval)
         ? savedSettings.refreshInterval
         : DEFAULT_APP_STATE.settings.refreshInterval
+    const arrivalsPerConnection =
+      typeof savedSettings.arrivalsPerConnection === 'number' &&
+      ARRIVALS_PER_CONNECTION_OPTIONS.includes(
+        savedSettings.arrivalsPerConnection,
+      )
+        ? savedSettings.arrivalsPerConnection
+        : DEFAULT_APP_STATE.settings.arrivalsPerConnection
 
     return {
       groups,
       settings: {
         apiKey: savedApiKey || envApiKey,
         refreshInterval,
+        arrivalsPerConnection,
       },
     }
   } catch {
