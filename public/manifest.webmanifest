@@ -1,0 +1,19 @@
+{
+  "name": "BKV Figyelő",
+  "short_name": "BKV Figyelő",
+  "description": "Saját BKV indulási táblád a BKK FUTÁR élő adataival.",
+  "lang": "hu",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f9",
+  "theme_color": "#312783",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
