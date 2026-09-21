@@ -41,7 +41,9 @@ import {
   REFRESH_INTERVAL_OPTIONS,
 } from './constants'
 import type {
+  ArrivalsEntry,
   Arrival,
+  BkkResponse,
   CommuteGroup,
   ConnectionDepartures,
   GroupDepartures,
@@ -74,6 +76,7 @@ type IconName =
   | 'trash'
   | 'train'
   | 'upload'
+  | 'menu'
 
 function Icon({
   name,
@@ -114,6 +117,7 @@ function Icon({
       </>
     ),
     plus: <path d="M12 5v14M5 12h14" />,
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
     refresh: (
       <>
         <path d="M21 12a9 9 0 0 0-15.3-6.4L3 8" />
@@ -174,6 +178,151 @@ function Icon({
   )
 }
 
+function TopbarMenu({
+  onOpenQuickSearch,
+  onOpenSettings,
+}: {
+  onOpenQuickSearch: () => void
+  onOpenSettings: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setIsOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  return (
+    <div className="topbar-menu" ref={menuRef}>
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        aria-label="Menü"
+        className={`icon-button icon-button-on-dark ${
+          isOpen ? 'is-active' : ''
+        }`}
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <Icon name="menu" />
+      </button>
+      {isOpen && (
+        <div className="topbar-menu-panel" role="menu">
+          <button
+            className="topbar-menu-item"
+            onClick={() => {
+              setIsOpen(false)
+              onOpenQuickSearch()
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <Icon name="search" size={18} />
+            <span>Gyors keresés</span>
+          </button>
+          <button
+            className="topbar-menu-item"
+            onClick={() => {
+              setIsOpen(false)
+              onOpenSettings()
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <Icon name="settings" size={18} />
+            <span>Beállítások</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function mapArrivalsForConnection(
+  connection: SavedConnection,
+  response: BkkResponse<ArrivalsEntry>,
+  tripRouteIds: Record<string, string>,
+): Arrival[] {
+  const entry = response.data?.entry
+  const routes = getRoutes(response.data?.references)
+  const stop = getStops(response.data?.references).find(
+    (candidate) => candidate.id === connection.stopId,
+  )
+  const serverNow =
+    response.currentTime && response.currentTime > 100_000_000_000
+      ? response.currentTime / 1000
+      : Date.now() / 1000
+
+  return (entry?.stopTimes ?? [])
+    .map((stopTime): Arrival | null => {
+      const timestamp =
+        stopTime.predictedDepartureTime ?? stopTime.departureTime
+
+      if (!timestamp || timestamp < serverNow - 15) {
+        return null
+      }
+
+      const route = getRouteForStopTime(
+        stopTime,
+        routes,
+        connection.routeId,
+        tripRouteIds,
+      )
+
+      return {
+        id: `${connection.id}-${stopTime.tripId}`,
+        connectionId: connection.id,
+        routeId: route?.id ?? connection.routeId,
+        routeName: route ? getRouteName(route) : connection.routeName,
+        routeType: route?.type ?? connection.routeType,
+        routeColor:
+          route?.style?.color ?? route?.color ?? connection.routeColor,
+        routeTextColor:
+          route?.style?.icon?.textColor ??
+          route?.textColor ??
+          connection.routeTextColor,
+        stopId: connection.stopId,
+        stopName: stop ? getStopName(stop) : connection.stopName,
+        destination:
+          stopTime.stopHeadsign ||
+          route?.description?.split('|')[1]?.trim() ||
+          'Célállomás nélkül',
+        timestamp,
+        minutes: Math.max(
+          0,
+          Math.round((timestamp - serverNow) / 60),
+        ),
+        isRealtime: stopTime.predictedDepartureTime !== undefined,
+        uncertain: stopTime.uncertain ?? false,
+      }
+    })
+    .filter((arrival): arrival is Arrival => arrival !== null)
+    .sort((a, b) => a.timestamp - b.timestamp)
+}
+
 function App() {
   const [appState, setAppState] = useState(loadState)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(
@@ -183,6 +332,7 @@ function App() {
   const [modal, setModal] = useState<ModalType>(null)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false)
   const [departures, setDepartures] = useState<Record<string, GroupDepartures>>(
     {},
   )
@@ -274,71 +424,11 @@ function App() {
                         appState.settings.apiKey,
                       ),
                     ])
-                    const entry = response.data?.entry
-                    const routes = getRoutes(response.data?.references)
-                    const stop = getStops(response.data?.references).find(
-                      (candidate) => candidate.id === connection.stopId,
+                    const arrivals = mapArrivalsForConnection(
+                      connection,
+                      response,
+                      tripRouteIds,
                     )
-                    const serverNow =
-                      response.currentTime &&
-                      response.currentTime > 100_000_000_000
-                        ? response.currentTime / 1000
-                        : Date.now() / 1000
-                    const arrivals = (entry?.stopTimes ?? [])
-                      .map((stopTime): Arrival | null => {
-                        const timestamp =
-                          stopTime.predictedDepartureTime ??
-                          stopTime.departureTime
-
-                        if (!timestamp || timestamp < serverNow - 15) {
-                          return null
-                        }
-
-                      const realtime =
-                        stopTime.predictedDepartureTime !== undefined
-
-                        const route = getRouteForStopTime(
-                          stopTime,
-                          routes,
-                          connection.routeId,
-                          tripRouteIds,
-                        )
-
-                        return {
-                          id: `${connection.id}-${stopTime.tripId}`,
-                          connectionId: connection.id,
-                          routeId: route?.id ?? connection.routeId,
-                          routeName: route
-                            ? getRouteName(route)
-                            : connection.routeName,
-                          routeType: route?.type ?? connection.routeType,
-                          routeColor:
-                            route?.style?.color ??
-                            route?.color ??
-                            connection.routeColor,
-                          routeTextColor:
-                            route?.style?.icon?.textColor ??
-                            route?.textColor ??
-                            connection.routeTextColor,
-                          stopId: connection.stopId,
-                          stopName: stop
-                            ? getStopName(stop)
-                            : connection.stopName,
-                          destination:
-                            stopTime.stopHeadsign ||
-                            route?.description?.split('|')[1]?.trim() ||
-                            'Célállomás nélkül',
-                          timestamp,
-                          minutes: Math.max(
-                            0,
-                            Math.round((timestamp - serverNow) / 60),
-                          ),
-                          isRealtime: realtime,
-                          uncertain: stopTime.uncertain ?? false,
-                        }
-                      })
-                      .filter((arrival): arrival is Arrival => arrival !== null)
-                      .sort((a, b) => a.timestamp - b.timestamp)
 
                     return { connection, arrivals }
                   } catch (error) {
@@ -636,7 +726,7 @@ function App() {
             </div>
           </div>
           <div className="topbar-actions">
-            {!settingsOpen && !isApiKeyMissing && (
+            {!settingsOpen && !quickSearchOpen && !isApiKeyMissing && (
               <button
                 aria-label="Adatok frissítése"
                 className={`header-refresh-button ${
@@ -650,20 +740,32 @@ function App() {
                 <span>Frissítés</span>
               </button>
             )}
-            <button
-              aria-label="Beállítások"
-              className="icon-button icon-button-on-dark"
-              onClick={() => setSettingsOpen(true)}
-              type="button"
-            >
-              <Icon name="settings" />
-            </button>
+            <TopbarMenu
+              onOpenQuickSearch={() => {
+                setSettingsOpen(false)
+                setQuickSearchOpen(true)
+              }}
+              onOpenSettings={() => {
+                setQuickSearchOpen(false)
+                setSettingsOpen(true)
+              }}
+            />
           </div>
         </div>
       </header>
 
       <main className="main-content">
-        {settingsOpen ? (
+        {quickSearchOpen ? (
+          <QuickSearchView
+            apiKey={appState.settings.apiKey}
+            arrivalsPerConnection={appState.settings.arrivalsPerConnection}
+            onClose={() => setQuickSearchOpen(false)}
+            onOpenSettings={() => {
+              setQuickSearchOpen(false)
+              setSettingsOpen(true)
+            }}
+          />
+        ) : settingsOpen ? (
           <SettingsView
             apiKey={appState.settings.apiKey}
             arrivalsPerConnection={appState.settings.arrivalsPerConnection}
@@ -1103,10 +1205,12 @@ function DataStatus({
 
 function AllArrivalsView({
   arrivals,
+  heading = 'Legkorábban érkezik',
   now,
   isRefreshing,
 }: {
   arrivals: Arrival[]
+  heading?: string
   now: number
   isRefreshing: boolean
 }) {
@@ -1129,7 +1233,7 @@ function AllArrivalsView({
   return (
     <div className="arrival-list">
       <div className="list-heading">
-        <span>Legkorábban érkezik</span>
+        <span>{heading}</span>
         <span>{arrivals.length} találat</span>
       </div>
       {arrivals.map((arrival, index) => (
@@ -2080,6 +2184,315 @@ function Modal({
         {children}
       </div>
     </div>
+  )
+}
+
+function QuickSearchView({
+  apiKey,
+  arrivalsPerConnection,
+  onClose,
+  onOpenSettings,
+}: {
+  apiKey: string
+  arrivalsPerConnection: number
+  onClose: () => void
+  onOpenSettings: () => void
+}) {
+  const [routeQuery, setRouteQuery] = useState('')
+  const [routeResults, setRouteResults] = useState<RouteReference[]>([])
+  const [hasSearched, setHasSearched] = useState(false)
+  const [routeStops, setRouteStops] = useState<RouteStopsResult>()
+  const [selectedDirectionId, setSelectedDirectionId] = useState('')
+  const [selectedRoute, setSelectedRoute] = useState<RouteReference>()
+  const [selectedStop, setSelectedStop] = useState<RouteStopOption>()
+  const [arrivals, setArrivals] = useState<Arrival[]>([])
+  const [searching, setSearching] = useState(false)
+  const [loadingStops, setLoadingStops] = useState(false)
+  const [loadingArrivals, setLoadingArrivals] = useState(false)
+  const [additionalArrivals, setAdditionalArrivals] = useState(0)
+  const [error, setError] = useState('')
+  const [now, setNow] = useState(() => Date.now())
+  const visibleArrivalsLimit = arrivalsPerConnection + additionalArrivals
+  const visibleArrivals = arrivals.slice(0, visibleArrivalsLimit)
+  const hasMoreArrivals = arrivals.length > visibleArrivalsLimit
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 10_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedRoute || !hasApiKey(apiKey)) {
+      setRouteStops(undefined)
+      setSelectedDirectionId('')
+      setSelectedStop(undefined)
+      setLoadingStops(false)
+      return
+    }
+
+    let cancelled = false
+    setRouteStops(undefined)
+    setSelectedDirectionId('')
+    setSelectedStop(undefined)
+    setLoadingStops(true)
+    setError('')
+
+    void getStopsForRoute(selectedRoute.id, apiKey)
+      .then((result) => {
+        if (!cancelled) {
+          setRouteStops(result)
+          if (result.directions.length === 0 || result.stops.length === 0) {
+            setError('Ehhez a járathoz nem sikerült megállókat betölteni.')
+          }
+        }
+      })
+      .catch((routeError) => {
+        if (!cancelled) {
+          setError(getErrorMessage(routeError))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingStops(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiKey, selectedRoute])
+
+  const selectedDirectionStops = useMemo(
+    () =>
+      routeStops?.stops.filter(
+        (option) => option.directionId === selectedDirectionId,
+      ) ?? [],
+    [routeStops, selectedDirectionId],
+  )
+
+  useEffect(() => {
+    if (!selectedRoute || !selectedStop || !hasApiKey(apiKey)) {
+      setArrivals([])
+      setAdditionalArrivals(0)
+      setLoadingArrivals(false)
+      return
+    }
+
+    let cancelled = false
+    const connection: SavedConnection = {
+      id: `quick-search-${selectedRoute.id}-${selectedStop.stop.id}`,
+      routeId: selectedRoute.id,
+      routeName: getRouteName(selectedRoute),
+      routeType: selectedRoute.type ?? 'BUS',
+      routeColor: selectedRoute.style?.color ?? selectedRoute.color,
+      routeTextColor:
+        selectedRoute.style?.icon?.textColor ?? selectedRoute.textColor,
+      stopId: selectedStop.stop.id,
+      stopName: getStopName(selectedStop.stop),
+      stopDirection:
+        selectedStop.directionLabel || selectedStop.stop.direction,
+    }
+
+    setArrivals([])
+    setAdditionalArrivals(0)
+    setLoadingArrivals(true)
+    setError('')
+
+    void Promise.all([
+      getArrivalsForConnection(connection, apiKey),
+      getTripRouteIdsForStop(connection.stopId, apiKey),
+    ])
+      .then(([response, tripRouteIds]) => {
+        if (!cancelled) {
+          setArrivals(
+            mapArrivalsForConnection(connection, response, tripRouteIds),
+          )
+        }
+      })
+      .catch((arrivalError) => {
+        if (!cancelled) {
+          setError(getErrorMessage(arrivalError))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingArrivals(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiKey, selectedRoute, selectedStop])
+
+  async function search(query: string): Promise<void> {
+    if (!query.trim()) {
+      setHasSearched(false)
+      setRouteResults([])
+      return
+    }
+
+    if (!hasApiKey(apiKey)) {
+      setError('A kereséshez előbb add meg a BKK API-kulcsot a beállításokban.')
+      return
+    }
+
+    setSearching(true)
+    setHasSearched(true)
+    setError('')
+    try {
+      const response = await searchTransit(query, apiKey)
+      setRouteResults(
+        filterRoutesByQuery(getRoutes(response.data?.references), query),
+      )
+    } catch (searchError) {
+      setError(getErrorMessage(searchError))
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  return (
+    <section className="settings-view quick-search-view">
+      <div className="settings-heading">
+        <button className="back-button" onClick={onClose} type="button">
+          <Icon name="arrow" size={18} />
+          Vissza
+        </button>
+        <p className="eyebrow">Gyors elérés</p>
+        <h1>Gyors keresés</h1>
+        <p>
+          Keress egy járatot, válaszd ki az irányt és a megállót. A keresés
+          eredményeit nem mentjük el csoportként.
+        </p>
+      </div>
+
+      {!hasApiKey(apiKey) ? (
+        <div className="settings-card quick-search-key-card">
+          <div className="settings-card-heading">
+            <div className="settings-card-icon">
+              <Icon name="settings" size={19} />
+            </div>
+            <div>
+              <h2>API-kulcs szükséges</h2>
+              <p>A BKK élő adatainak lekéréséhez add meg az API-kulcsot.</p>
+            </div>
+          </div>
+          <button
+            className="primary-button"
+            onClick={onOpenSettings}
+            type="button"
+          >
+            Beállítások megnyitása
+            <Icon name="arrow" size={16} />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="settings-card quick-search-form-card">
+            <SearchField
+              label="Járat keresése"
+              onChange={setRouteQuery}
+              onSearch={() => void search(routeQuery)}
+              placeholder="Például: 4, M3 vagy 105"
+              query={routeQuery}
+              searching={searching}
+            />
+            {hasSearched && (
+              <SearchResultList
+                emptyLabel="Nem találtam járatot."
+                items={routeResults}
+                renderItem={(route) => (
+                  <SearchRouteResult
+                    isSelected={selectedRoute?.id === route.id}
+                    onClick={() => {
+                      setSelectedRoute(route)
+                      setRouteStops(undefined)
+                      setSelectedDirectionId('')
+                      setSelectedStop(undefined)
+                      setArrivals([])
+                      setAdditionalArrivals(0)
+                      setError('')
+                    }}
+                    route={route}
+                  />
+                )}
+              />
+            )}
+            {selectedRoute && (
+              <div className="selection-summary">
+                <Icon name="check" size={15} />
+                {getRouteName(selectedRoute)} kiválasztva
+              </div>
+            )}
+            {selectedRoute && (
+              <RouteDirectionSelect
+                directions={routeStops?.directions ?? []}
+                loading={loadingStops}
+                onChange={(value) => {
+                  setSelectedDirectionId(value)
+                  setSelectedStop(undefined)
+                }}
+                selectedValue={selectedDirectionId}
+              />
+            )}
+            {selectedRoute && selectedDirectionId && (
+              <RouteStopsSelect
+                loading={loadingStops}
+                onChange={(value) =>
+                  setSelectedStop(
+                    selectedDirectionStops.find(
+                      (option) => option.value === value,
+                    ),
+                  )
+                }
+                options={selectedDirectionStops}
+                selectedValue={selectedStop?.value ?? ''}
+              />
+            )}
+          </div>
+
+          {selectedStop && (
+            <div className="settings-card quick-search-results-card">
+              <div className="settings-card-heading">
+                <div className="settings-card-icon muted">
+                  <Icon name="train" size={19} />
+                </div>
+                <div>
+                  <h2>Következő indulások</h2>
+                  <p>
+                    {getRouteName(selectedRoute!)} ·{' '}
+                    {getStopName(selectedStop.stop)}
+                  </p>
+                </div>
+              </div>
+              <AllArrivalsView
+                arrivals={visibleArrivals}
+                heading="Következő indulások"
+                isRefreshing={loadingArrivals}
+                now={now}
+              />
+              {hasMoreArrivals && (
+                <button
+                  className="load-more-button"
+                  onClick={() =>
+                    setAdditionalArrivals(
+                      (current) => current + ARRIVALS_LOAD_MORE_STEP,
+                    )
+                  }
+                  type="button"
+                >
+                  <Icon name="plus" size={17} />
+                  További indulások megjelenítése
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {error && <p className="form-error">{error}</p>}
+    </section>
   )
 }
 

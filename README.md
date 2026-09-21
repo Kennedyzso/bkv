@@ -13,6 +13,7 @@ láthatja.
 - összesített, időrendbe rendezett nézet;
 - járatonként csoportosított nézet;
 - járatok elrejtése és visszakapcsolása lenyíló jelölőnégyzet-listából;
+- nem mentett gyors keresés járatra, irányra és megállóra;
 - valós idejű és menetrend szerinti idők megkülönböztetése;
 - konfiguráció mentése a böngésző localStorage-ába;
 - járatcsoportok JSON-exportja és -importja API-kulcs megosztása nélkül;

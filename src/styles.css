@@ -114,6 +114,52 @@ input:focus-visible {
   gap: 3px;
 }
 
+.topbar-menu {
+  position: relative;
+}
+
+.topbar-menu .icon-button.is-active,
+.topbar-menu .icon-button:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.topbar-menu-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: 190px;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(37, 29, 100, 0.18);
+}
+
+.topbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.topbar-menu-item .icon {
+  color: var(--purple);
+}
+
+.topbar-menu-item:hover {
+  background: var(--purple-pale);
+}
+
 .header-refresh-button {
   display: inline-flex;
   align-items: center;
@@ -1833,6 +1879,24 @@ h3 {
   font-weight: 700;
 }
 
+.quick-search-form-card .search-results {
+  margin-top: 12px;
+  margin-bottom: 14px;
+}
+
+.quick-search-form-card .selection-summary {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.quick-search-form-card .select-field {
+  margin-top: 12px;
+}
+
+.quick-search-results-card .load-more-button {
+  margin-top: 14px;
+}
+
 .form-error {
   margin: 0;
   padding: 10px 11px;
@@ -2014,6 +2078,25 @@ h3 {
 }
 
 @media (max-width: 540px) {
+  html,
+  body,
+  .search-results,
+  .connection-filter-options,
+  .modal {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  .search-results::-webkit-scrollbar,
+  .connection-filter-options::-webkit-scrollbar,
+  .modal::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   .topbar-inner {
     min-height: 60px;
   }
