@@ -55,6 +55,7 @@ import type {
 } from './types'
 
 type ViewMode = 'all' | 'grouped'
+type SettingsTab = 'technical' | 'behavior'
 type GroupedSortMode = 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
 
@@ -333,6 +334,8 @@ function App() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [quickSearchOpen, setQuickSearchOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] =
+    useState<SettingsTab>('behavior')
   const [departures, setDepartures] = useState<Record<string, GroupDepartures>>(
     {},
   )
@@ -710,6 +713,12 @@ function App() {
     : undefined
   const isApiKeyMissing = !hasApiKey(appState.settings.apiKey)
 
+  function openSettings(initialTab: SettingsTab = 'behavior'): void {
+    setQuickSearchOpen(false)
+    setSettingsInitialTab(initialTab)
+    setSettingsOpen(true)
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -745,10 +754,7 @@ function App() {
                 setSettingsOpen(false)
                 setQuickSearchOpen(true)
               }}
-              onOpenSettings={() => {
-                setQuickSearchOpen(false)
-                setSettingsOpen(true)
-              }}
+              onOpenSettings={() => openSettings()}
             />
           </div>
         </div>
@@ -760,16 +766,14 @@ function App() {
             apiKey={appState.settings.apiKey}
             arrivalsPerConnection={appState.settings.arrivalsPerConnection}
             onClose={() => setQuickSearchOpen(false)}
-            onOpenSettings={() => {
-              setQuickSearchOpen(false)
-              setSettingsOpen(true)
-            }}
+            onOpenSettings={() => openSettings('technical')}
           />
         ) : settingsOpen ? (
           <SettingsView
             apiKey={appState.settings.apiKey}
             arrivalsPerConnection={appState.settings.arrivalsPerConnection}
             groups={appState.groups}
+            initialTab={settingsInitialTab}
             onApiKeyChange={(apiKey) => updateSettings({ apiKey })}
             onArrivalsPerConnectionChange={(arrivalsPerConnection) =>
               updateSettings({ arrivalsPerConnection })
@@ -783,7 +787,7 @@ function App() {
             refreshInterval={appState.settings.refreshInterval}
           />
         ) : isApiKeyMissing ? (
-          <ApiKeyGate onOpenSettings={() => setSettingsOpen(true)} />
+          <ApiKeyGate onOpenSettings={() => openSettings('technical')} />
         ) : (
           <>
             {appState.groups.length > 0 && (
@@ -866,7 +870,7 @@ function App() {
           onClose={() => setModal(null)}
           onOpenSettings={() => {
             setModal(null)
-            setSettingsOpen(true)
+            openSettings('technical')
           }}
         />
       )}
@@ -917,14 +921,8 @@ function GroupTabs({
 function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
   return (
     <section className="empty-dashboard">
-      <div className="empty-illustration">
-        <div className="empty-sun" />
-        <div className="empty-route empty-route-one" />
-        <div className="empty-route empty-route-two" />
-        <div className="empty-stop">
-          <span />
-          <span />
-        </div>
+      <div className="empty-group-icon">
+        <Icon name="train" size={28} />
       </div>
       <p className="eyebrow">Saját indulási táblád</p>
       <h2>Még nincs csoportod</h2>
@@ -1675,7 +1673,6 @@ function GroupModal({
           Csoport neve
         </label>
         <input
-          autoFocus
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="sentences"
@@ -2513,6 +2510,7 @@ function SettingsView({
   apiKey,
   arrivalsPerConnection,
   groups,
+  initialTab,
   refreshInterval,
   onApiKeyChange,
   onArrivalsPerConnectionChange,
@@ -2524,6 +2522,7 @@ function SettingsView({
   apiKey: string
   arrivalsPerConnection: number
   groups: CommuteGroup[]
+  initialTab: SettingsTab
   refreshInterval: number
   onApiKeyChange: (value: string) => void
   onArrivalsPerConnectionChange: (value: number) => void
@@ -2532,9 +2531,7 @@ function SettingsView({
   onExportGroups: () => void
   onImportGroups: (file: File) => Promise<number>
 }) {
-  const [activeTab, setActiveTab] = useState<'technical' | 'behavior'>(
-    'behavior',
-  )
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [isImporting, setIsImporting] = useState(false)
   const [transferNotice, setTransferNotice] = useState<{
     kind: 'error' | 'success'
