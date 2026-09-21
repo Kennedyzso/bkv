@@ -24,10 +24,17 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+}
+
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 100% 0, rgba(49, 39, 131, 0.07), transparent 27rem),
     #f6f5f9;
@@ -2077,7 +2084,7 @@ h3 {
   }
 }
 
-@media (max-width: 540px) {
+@media (max-width: 767px) {
   html,
   body,
   .search-results,
@@ -2095,6 +2102,29 @@ h3 {
     display: none;
     width: 0;
     height: 0;
+  }
+
+  .topbar-inner {
+    width: 100%;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .main-content {
+    width: 100%;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .group-tabs-wrap {
+    margin-right: -16px;
+    margin-left: -16px;
+  }
+
+  input:not([type='checkbox']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 
   .topbar-inner {
@@ -2142,13 +2172,22 @@ h3 {
 
 @media (max-width: 430px) {
   .main-content {
-    width: min(100% - 24px, 880px);
+    width: 100%;
+    padding-right: 12px;
+    padding-left: 12px;
     padding-top: 20px;
   }
 
   .topbar-inner {
-    width: min(100% - 24px, 1080px);
+    width: 100%;
+    padding-right: 12px;
+    padding-left: 12px;
     min-height: 58px;
+  }
+
+  .group-tabs-wrap {
+    margin-right: -12px;
+    margin-left: -12px;
   }
 
   .brand-name {

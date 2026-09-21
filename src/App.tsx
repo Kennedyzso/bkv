@@ -1665,21 +1665,26 @@ function GroupModal({
       onClose={onClose}
       title={isEditing ? 'Csoport átnevezése' : 'Új csoport'}
     >
-      <form className="modal-form" onSubmit={submit}>
+      <form autoComplete="off" className="modal-form" onSubmit={submit}>
         <p className="modal-intro">
           {isEditing
             ? 'Módosítsd a csoport nevét.'
             : 'Csoportosítsd azokat a járatokat, amelyeket ugyanazon az úton használsz.'}
         </p>
-        <label className="field-label" htmlFor="group-name">
+        <label className="field-label" htmlFor="group-label">
           Csoport neve
         </label>
         <input
           autoFocus
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="sentences"
           className="text-input"
-          id="group-name"
+          id="group-label"
+          name="group-label"
           onChange={(event) => setName(event.target.value)}
           placeholder="Például: Munkába menet"
+          spellCheck={false}
           value={name}
         />
         <div className="modal-actions">
@@ -1834,7 +1839,11 @@ function ConnectionModal({
 
   return (
     <Modal onClose={onClose} title="Járat hozzáadása">
-      <form className="modal-form connection-form" onSubmit={submit}>
+      <form
+        autoComplete="off"
+        className="modal-form connection-form"
+        onSubmit={submit}
+      >
         {!hasApiKey(apiKey) ? (
           <div className="modal-key-prompt">
             <div className="modal-key-prompt-icon">
@@ -1958,6 +1967,9 @@ function SearchField({
       <span className="search-input-wrap">
         <Icon name="search" size={17} />
         <input
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
           className="text-input"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -1967,6 +1979,7 @@ function SearchField({
             }
           }}
           placeholder={placeholder}
+          spellCheck={false}
           value={query}
         />
         <button
@@ -2520,7 +2533,7 @@ function SettingsView({
   onImportGroups: (file: File) => Promise<number>
 }) {
   const [activeTab, setActiveTab] = useState<'technical' | 'behavior'>(
-    'technical',
+    'behavior',
   )
   const [isImporting, setIsImporting] = useState(false)
   const [transferNotice, setTransferNotice] = useState<{
@@ -2579,22 +2592,22 @@ function SettingsView({
 
       <div className="settings-tabs" role="tablist" aria-label="Beállítások">
         <button
-          aria-selected={activeTab === 'technical'}
-          className={activeTab === 'technical' ? 'is-active' : ''}
-          onClick={() => setActiveTab('technical')}
-          role="tab"
-          type="button"
-        >
-          Technikai beállítások
-        </button>
-        <button
           aria-selected={activeTab === 'behavior'}
           className={activeTab === 'behavior' ? 'is-active' : ''}
           onClick={() => setActiveTab('behavior')}
           role="tab"
           type="button"
         >
-          Működési beállítások
+          Megjelenítés
+        </button>
+        <button
+          aria-selected={activeTab === 'technical'}
+          className={activeTab === 'technical' ? 'is-active' : ''}
+          onClick={() => setActiveTab('technical')}
+          role="tab"
+          type="button"
+        >
+          Konfiguráció
         </button>
       </div>
 
@@ -2614,10 +2627,14 @@ function SettingsView({
               API-kulcs
             </label>
             <input
+              autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="none"
               className="text-input"
               id="api-key"
               onChange={(event) => onApiKeyChange(event.target.value)}
               placeholder="Illeszd be a BKK API-kulcsot"
+              spellCheck={false}
               type="password"
               value={apiKey}
             />
@@ -2649,6 +2666,58 @@ function SettingsView({
                 </button>
               ))}
             </div>
+          </div>
+          <div className="settings-card">
+            <div className="settings-card-heading">
+              <div className="settings-card-icon">
+                <Icon name="download" size={19} />
+              </div>
+              <div>
+                <h2>Járatcsoportok átvitele</h2>
+                <p>Mentés fájlba vagy beolvasás másik eszközről</p>
+              </div>
+            </div>
+            <div className="transfer-actions">
+              <button
+                className="secondary-button"
+                disabled={groups.length === 0}
+                onClick={onExportGroups}
+                type="button"
+              >
+                <Icon name="download" size={17} />
+                Járatok exportálása
+              </button>
+              <button
+                className="secondary-button"
+                disabled={isImporting}
+                onClick={() => importInputRef.current?.click()}
+                type="button"
+              >
+                <Icon name="upload" size={17} />
+                Járatok importálása
+              </button>
+              <input
+                ref={importInputRef}
+                accept=".json,application/json"
+                autoComplete="off"
+                className="visually-hidden"
+                onChange={(event) => void handleImportChange(event)}
+                type="file"
+              />
+            </div>
+            {transferNotice && (
+              <p
+                aria-live="polite"
+                className={`transfer-status is-${transferNotice.kind}`}
+                role={transferNotice.kind === 'error' ? 'alert' : 'status'}
+              >
+                {transferNotice.message}
+              </p>
+            )}
+            <p className="field-help">
+              Az exportált JSON csak a csoportokat és a mentett járatokat
+              tartalmazza, az API-kulcsot nem.
+            </p>
           </div>
         </>
       ) : (
@@ -2682,58 +2751,6 @@ function SettingsView({
           </p>
         </div>
       )}
-
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-card-icon">
-            <Icon name="download" size={19} />
-          </div>
-          <div>
-            <h2>Járatcsoportok átvitele</h2>
-            <p>Mentés fájlba vagy beolvasás másik eszközről</p>
-          </div>
-        </div>
-        <div className="transfer-actions">
-          <button
-            className="secondary-button"
-            disabled={groups.length === 0}
-            onClick={onExportGroups}
-            type="button"
-          >
-            <Icon name="download" size={17} />
-            Járatok exportálása
-          </button>
-          <button
-            className="secondary-button"
-            disabled={isImporting}
-            onClick={() => importInputRef.current?.click()}
-            type="button"
-          >
-            <Icon name="upload" size={17} />
-            Járatok importálása
-          </button>
-          <input
-            ref={importInputRef}
-            accept=".json,application/json"
-            className="visually-hidden"
-            onChange={(event) => void handleImportChange(event)}
-            type="file"
-          />
-        </div>
-        {transferNotice && (
-          <p
-            aria-live="polite"
-            className={`transfer-status is-${transferNotice.kind}`}
-            role={transferNotice.kind === 'error' ? 'alert' : 'status'}
-          >
-            {transferNotice.message}
-          </p>
-        )}
-        <p className="field-help">
-          Az exportált JSON csak a csoportokat és a mentett járatokat
-          tartalmazza, az API-kulcsot nem.
-        </p>
-      </div>
 
       <div className="info-card">
         <Icon name="train" size={18} />
