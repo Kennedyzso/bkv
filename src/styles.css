@@ -108,6 +108,40 @@ input:focus-visible {
   font-weight: 500;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.header-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 11px;
+  color: rgba(255, 255, 255, 0.88);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.header-refresh-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.header-refresh-button:disabled {
+  color: rgba(255, 255, 255, 0.42);
+  cursor: not-allowed;
+}
+
+.header-refresh-button:active {
+  transform: translateY(1px);
+}
+
 .icon {
   display: block;
   flex: 0 0 auto;
@@ -157,16 +191,11 @@ input:focus-visible {
   padding: 42px 0 48px;
 }
 
-.intro-row,
 .group-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
-}
-
-.intro-row {
-  margin-bottom: 27px;
 }
 
 .eyebrow {
@@ -1985,18 +2014,38 @@ h3 {
 }
 
 @media (max-width: 540px) {
-  .intro-row,
+  .topbar-inner {
+    min-height: 60px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand-logo {
+    width: 58px;
+    height: 29px;
+  }
+
+  .brand-name {
+    font-size: 15px;
+  }
+
+  .header-refresh-button {
+    width: 38px;
+    padding: 0;
+  }
+
+  .header-refresh-button span {
+    display: none;
+  }
+
+  .brand-caption {
+    display: none;
+  }
+
   .group-heading {
     align-items: flex-start;
-  }
-
-  .intro-row {
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  .intro-row .refresh-button {
-    align-self: flex-start;
   }
 
   .group-heading {
@@ -2011,19 +2060,16 @@ h3 {
 @media (max-width: 430px) {
   .main-content {
     width: min(100% - 24px, 880px);
-    padding-top: 30px;
+    padding-top: 20px;
   }
 
   .topbar-inner {
     width: min(100% - 24px, 1080px);
-  }
-
-  .brand-caption {
-    display: none;
+    min-height: 58px;
   }
 
   .brand-name {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .arrival-card {

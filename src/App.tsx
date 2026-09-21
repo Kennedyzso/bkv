@@ -638,14 +638,30 @@ function App() {
               <div className="brand-caption">Indulás előtt egy pillantás</div>
             </div>
           </div>
-          <button
-            aria-label="Beállítások"
-            className="icon-button icon-button-on-dark"
-            onClick={() => setSettingsOpen(true)}
-            type="button"
-          >
-            <Icon name="settings" />
-          </button>
+          <div className="topbar-actions">
+            {!settingsOpen && !isApiKeyMissing && (
+              <button
+                aria-label="Adatok frissítése"
+                className={`header-refresh-button ${
+                  isRefreshing ? 'is-spinning' : ''
+                }`}
+                disabled={isRefreshing || appState.groups.length === 0}
+                onClick={() => void refreshAll()}
+                type="button"
+              >
+                <Icon name="refresh" size={18} />
+                <span>Frissítés</span>
+              </button>
+            )}
+            <button
+              aria-label="Beállítások"
+              className="icon-button icon-button-on-dark"
+              onClick={() => setSettingsOpen(true)}
+              type="button"
+            >
+              <Icon name="settings" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -671,22 +687,6 @@ function App() {
           <ApiKeyGate onOpenSettings={() => setSettingsOpen(true)} />
         ) : (
           <>
-            <section className="intro-row">
-              <div>
-                <p className="eyebrow">Budapesti közlekedés</p>
-                <h1>Merre indulj?</h1>
-              </div>
-              <button
-                className={`refresh-button ${isRefreshing ? 'is-spinning' : ''}`}
-                disabled={isRefreshing || appState.groups.length === 0}
-                onClick={() => void refreshAll()}
-                type="button"
-              >
-                <Icon name="refresh" size={17} />
-                <span>Frissítés</span>
-              </button>
-            </section>
-
             {appState.groups.length > 0 && (
               <GroupTabs
                 activeGroupId={activeGroup?.id}
