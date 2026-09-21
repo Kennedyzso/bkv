@@ -287,8 +287,6 @@ function App() {
                     const arrivals = (entry?.stopTimes ?? [])
                       .map((stopTime): Arrival | null => {
                         const timestamp =
-                          stopTime.predictedArrivalTime ??
-                          stopTime.arrivalTime ??
                           stopTime.predictedDepartureTime ??
                           stopTime.departureTime
 
@@ -296,9 +294,8 @@ function App() {
                           return null
                         }
 
-                        const realtime =
-                          stopTime.predictedArrivalTime !== undefined ||
-                          stopTime.predictedDepartureTime !== undefined
+                      const realtime =
+                        stopTime.predictedDepartureTime !== undefined
 
                         const route = getRouteForStopTime(
                           stopTime,
