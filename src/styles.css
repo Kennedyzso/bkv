@@ -1184,6 +1184,18 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+.time-display .time-display-label {
+  max-width: 125px;
+  overflow: hidden;
+  color: var(--purple);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
 .time-display.is-compact {
   gap: 2px;
 }
@@ -1277,11 +1289,15 @@ h3 {
 
 .mini-arrival {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 64px;
+  grid-template-columns: minmax(0, 1fr) 64px;
   align-items: center;
   gap: 10px;
   min-height: 52px;
   border-bottom: 1px solid #f0eef4;
+}
+
+.mini-arrival.has-pin {
+  grid-template-columns: minmax(0, 1fr) 28px 64px;
 }
 
 .mini-arrival:last-child {

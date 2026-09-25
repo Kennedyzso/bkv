@@ -62,6 +62,24 @@ type SettingsTab = 'technical' | 'behavior'
 type GroupedSortMode = 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
 
+function getPinnedArrivalExpiryTimestamp(arrival: PinnedArrival): number {
+  if (
+    arrival.destinationStopName &&
+    arrival.destinationTimestamp !== undefined
+  ) {
+    return arrival.destinationTimestamp
+  }
+
+  return arrival.timestamp
+}
+
+function isPinnedArrivalActive(
+  arrival: PinnedArrival,
+  nowSeconds: number,
+): boolean {
+  return getPinnedArrivalExpiryTimestamp(arrival) > nowSeconds
+}
+
 type IconName =
   | 'arrow'
   | 'check'
@@ -394,21 +412,19 @@ function updatePinnedArrivals(
     const destinationArrival = connectionResult?.destinationArrivals?.find(
       (arrival) => arrival.tripId === pinnedArrival.tripId,
     )
-    const destinationTimestamp =
-      destinationArrival?.timestamp ?? pinnedArrival.destinationTimestamp
+    const refreshedArrival: PinnedArrival = {
+      ...pinnedArrival,
+      ...(liveArrival ?? {}),
+      destinationStopName: pinnedArrival.destinationStopName,
+      destinationTimestamp:
+        destinationArrival?.timestamp ?? pinnedArrival.destinationTimestamp,
+    }
 
-    if (destinationTimestamp <= nowSeconds) {
+    if (!isPinnedArrivalActive(refreshedArrival, nowSeconds)) {
       return []
     }
 
-    return [
-      {
-        ...pinnedArrival,
-        ...(liveArrival ?? {}),
-        destinationStopName: pinnedArrival.destinationStopName,
-        destinationTimestamp,
-      },
-    ]
+    return [refreshedArrival]
   })
 }
 
@@ -469,7 +485,7 @@ function App() {
         new Set(group.connections.map((connection) => connection.id)),
       ]),
     )
-    const cutoff = Date.now() / 1000
+    const nowSeconds = Date.now() / 1000
 
     setPinnedArrivalsByGroup((current) => {
       let changed = false
@@ -480,7 +496,7 @@ function App() {
             ? arrivals.filter(
                 (arrival) =>
                   validConnectionIds.has(arrival.connectionId) &&
-                  arrival.destinationTimestamp > cutoff,
+                  isPinnedArrivalActive(arrival, nowSeconds),
               )
             : []
 
@@ -736,13 +752,6 @@ function App() {
   }
 
   function togglePinnedArrival(groupId: string, arrival: Arrival): void {
-    const destinationStopName = arrival.destinationStopName
-    const destinationTimestamp = arrival.destinationTimestamp
-
-    if (!destinationStopName || !destinationTimestamp) {
-      return
-    }
-
     setPinnedArrivalsByGroup((current) => {
       const groupPins = current[groupId] ?? []
       const isPinned = groupPins.some((pinned) => pinned.id === arrival.id)
@@ -755,8 +764,6 @@ function App() {
               ...groupPins,
               {
                 ...arrival,
-                destinationStopName,
-                destinationTimestamp,
                 pinnedAt: Date.now(),
               },
             ],
@@ -1282,11 +1289,12 @@ function GroupDashboard({
     .filter(
       (arrival) =>
         !hiddenConnectionIds.has(arrival.connectionId) &&
-        arrival.destinationTimestamp > now / 1000,
+        isPinnedArrivalActive(arrival, now / 1000),
     )
     .sort((left, right) => {
       return (
-        left.destinationTimestamp - right.destinationTimestamp ||
+        getPinnedArrivalExpiryTimestamp(left) -
+          getPinnedArrivalExpiryTimestamp(right) ||
         left.pinnedAt - right.pinnedAt
       )
     })
@@ -1898,9 +1906,7 @@ function ArrivalCard({
   onTogglePin?: () => void
 }) {
   const color = getModeColor(arrival.routeType, arrival.routeColor)
-  const canPin = Boolean(
-    arrival.destinationStopName && arrival.destinationTimestamp,
-  )
+  const hasReachedBoardingStop = arrival.timestamp <= now / 1000
 
   return (
     <article className={`arrival-card ${isFirst ? 'is-first' : ''}`}>
@@ -1923,15 +1929,8 @@ function ArrivalCard({
             className={`arrival-pin-button ${
               isPinned ? 'is-pinned' : ''
             }`}
-            disabled={!canPin}
             onClick={onTogglePin}
-            title={
-              canPin
-                ? isPinned
-                  ? 'Rögzítés feloldása'
-                  : 'Járat rögzítése'
-                : 'A rögzítéshez célmegálló szükséges'
-            }
+            title={isPinned ? 'Rögzítés feloldása' : 'Járat rögzítése'}
             type="button"
           >
             <Icon name="pin" size={16} />
@@ -1949,17 +1948,27 @@ function ArrivalCard({
           {arrival.isRealtime ? '● Valós idejű adat' : '○ Menetrend szerint'}
           {arrival.uncertain ? ' · bizonytalan' : ''}
         </span>
-        {arrival.destinationStopName && (
+        {arrival.destinationStopName &&
+          (!isPinned || !hasReachedBoardingStop) && (
           <span className="arrival-destination">
-            Cél: {arrival.destinationStopName} ·{' '}
-            {arrival.destinationTimestamp
-              ? formatDestinationArrival(arrival.destinationTimestamp, now)
-              : 'nincs adat'}
+            {isPinned ? (
+              `Cél: ${arrival.destinationStopName}`
+            ) : (
+              <>
+                Cél: {arrival.destinationStopName} ·{' '}
+                {arrival.destinationTimestamp
+                  ? formatDestinationArrival(
+                      arrival.destinationTimestamp,
+                      now,
+                    )
+                  : 'nincs adat'}
+              </>
+            )}
           </span>
         )}
       </div>
       {isPinned ? (
-        <DestinationTimeDisplay arrival={arrival} now={now} />
+        <PinnedArrivalTimeDisplay arrival={arrival} now={now} />
       ) : (
         <TimeDisplay arrival={arrival} now={now} />
       )}
@@ -1978,12 +1987,12 @@ function MiniArrival({
   isPinned?: boolean
   onTogglePin?: () => void
 }) {
-  const canPin = Boolean(
-    arrival.destinationStopName && arrival.destinationTimestamp,
-  )
-
   return (
-    <div className="mini-arrival">
+    <div
+      className={`mini-arrival ${
+        onTogglePin ? 'has-pin' : ''
+      }`}
+    >
       <div>
         <strong>{arrival.destination}</strong>
         <span
@@ -2013,15 +2022,8 @@ function MiniArrival({
           className={`arrival-pin-button ${
             isPinned ? 'is-pinned' : ''
           }`}
-          disabled={!canPin}
           onClick={onTogglePin}
-          title={
-            canPin
-              ? isPinned
-                ? 'Rögzítés feloldása'
-                : 'Járat rögzítése'
-              : 'A rögzítéshez célmegálló szükséges'
-          }
+          title={isPinned ? 'Rögzítés feloldása' : 'Járat rögzítése'}
           type="button"
         >
           <Icon name="pin" size={15} />
@@ -2036,10 +2038,12 @@ function TimeDisplay({
   arrival,
   now,
   compact = false,
+  label,
 }: {
   arrival: Arrival
   now: number
   compact?: boolean
+  label?: string
 }) {
   const minutes = Math.max(
     0,
@@ -2048,10 +2052,25 @@ function TimeDisplay({
 
   return (
     <div className={`time-display ${compact ? 'is-compact' : ''}`}>
+      {label && <span className="time-display-label">{label}</span>}
       <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
       <span>{formatTime(arrival.timestamp)}</span>
     </div>
   )
+}
+
+function PinnedArrivalTimeDisplay({
+  arrival,
+  now,
+}: {
+  arrival: Arrival
+  now: number
+}) {
+  if (arrival.timestamp > now / 1000) {
+    return <TimeDisplay arrival={arrival} label="Felszállás" now={now} />
+  }
+
+  return <DestinationTimeDisplay arrival={arrival} now={now} />
 }
 
 function DestinationTimeDisplay({
@@ -2072,6 +2091,11 @@ function DestinationTimeDisplay({
 
   return (
     <div className="time-display is-destination-time">
+      <span className="time-display-label">
+        {arrival.destinationStopName
+          ? `Érkezés: ${arrival.destinationStopName}`
+          : 'Célba érkezik'}
+      </span>
       <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
       <span>{formatTime(arrival.destinationTimestamp)}</span>
     </div>

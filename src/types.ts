@@ -189,8 +189,6 @@ export interface Arrival {
 }
 
 export interface PinnedArrival extends Arrival {
-  destinationStopName: string
-  destinationTimestamp: number
   pinnedAt: number
 }
 

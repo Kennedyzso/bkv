@@ -105,9 +105,8 @@ function normalizePinnedArrival(value: unknown): PinnedArrival | null {
     'stopId',
     'stopName',
     'destination',
-    'destinationStopName',
   ]
-  const requiredNumbers = ['timestamp', 'minutes', 'destinationTimestamp', 'pinnedAt']
+  const requiredNumbers = ['timestamp', 'minutes', 'pinnedAt']
 
   if (
     requiredStrings.some(
@@ -120,7 +119,7 @@ function normalizePinnedArrival(value: unknown): PinnedArrival | null {
     return null
   }
 
-  return {
+  const normalizedArrival = {
     id: value.id as string,
     connectionId: value.connectionId as string,
     tripId: value.tripId as string,
@@ -136,14 +135,24 @@ function normalizePinnedArrival(value: unknown): PinnedArrival | null {
     stopId: value.stopId as string,
     stopName: value.stopName as string,
     destination: value.destination as string,
-    destinationStopName: value.destinationStopName as string,
-    destinationTimestamp: value.destinationTimestamp as number,
+    destinationStopName:
+      typeof value.destinationStopName === 'string'
+        ? value.destinationStopName
+        : undefined,
+    destinationTimestamp:
+      typeof value.destinationTimestamp === 'number'
+        ? value.destinationTimestamp
+        : undefined,
     timestamp: value.timestamp as number,
     minutes: value.minutes as number,
     isRealtime: value.isRealtime as boolean,
     uncertain: value.uncertain as boolean,
-    pinnedAt: value.pinnedAt as number,
   }
+
+  return {
+    ...normalizedArrival,
+    pinnedAt: value.pinnedAt as number,
+  } as PinnedArrival
 }
 
 export type PinnedArrivalsByGroup = Record<string, PinnedArrival[]>
