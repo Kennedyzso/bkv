@@ -332,6 +332,9 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('all')
   const [modal, setModal] = useState<ModalType>(null)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [editingConnectionId, setEditingConnectionId] = useState<string | null>(
+    null,
+  )
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [quickSearchOpen, setQuickSearchOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] =
@@ -566,6 +569,16 @@ function App() {
     setModal('group')
   }
 
+  function openConnectionModal(connectionId: string | null = null): void {
+    setEditingConnectionId(connectionId)
+    setModal('connection')
+  }
+
+  function closeConnectionModal(): void {
+    setEditingConnectionId(null)
+    setModal(null)
+  }
+
   function closeGroupModal(): void {
     setEditingGroupId(null)
     setModal(null)
@@ -608,18 +621,22 @@ function App() {
     createGroup(trimmedName)
   }
 
-  function addConnection(connection: SavedConnection): boolean {
+  function saveConnection(connection: SavedConnection): boolean {
     if (!activeGroup) {
       return false
     }
 
-    if (
-      activeGroup.connections.some(
-        (existing) =>
-          existing.routeId === connection.routeId &&
-          existing.stopId === connection.stopId,
-      )
-    ) {
+    const isEditing = activeGroup.connections.some(
+      (existing) => existing.id === connection.id,
+    )
+    const hasDuplicate = activeGroup.connections.some(
+      (existing) =>
+        existing.id !== connection.id &&
+        existing.routeId === connection.routeId &&
+        existing.stopId === connection.stopId,
+    )
+
+    if (hasDuplicate) {
       return false
     }
 
@@ -627,11 +644,18 @@ function App() {
       ...current,
       groups: current.groups.map((group) =>
         group.id === activeGroup.id
-          ? { ...group, connections: [...group.connections, connection] }
+          ? {
+              ...group,
+              connections: isEditing
+                ? group.connections.map((existing) =>
+                    existing.id === connection.id ? connection : existing,
+                  )
+                : [...group.connections, connection],
+            }
           : group,
       ),
     }))
-    setModal(null)
+    closeConnectionModal()
     return true
   }
 
@@ -829,9 +853,10 @@ function App() {
                 additionalArrivals={additionalArrivalsByGroup[activeGroup.id] ?? 0}
                 isRefreshing={isRefreshing}
                 now={now}
-                onAddConnection={() => setModal('connection')}
+                onAddConnection={() => openConnectionModal()}
                 onDeleteConnection={removeConnection}
                 onDeleteGroup={() => removeGroup(activeGroup.id)}
+                onEditConnection={openConnectionModal}
                 onEditGroup={() => openGroupModal(activeGroup.id)}
                 onLoadMoreArrivals={() => loadMoreArrivals(activeGroup.id)}
                 onToggleConnectionVisibility={toggleConnectionVisibility}
@@ -865,13 +890,16 @@ function App() {
       {!isApiKeyMissing && modal === 'connection' && (
         <ConnectionModal
           apiKey={appState.settings.apiKey}
+          editingConnection={activeGroup?.connections.find(
+            (connection) => connection.id === editingConnectionId,
+          )}
           existingConnections={activeGroup?.connections ?? []}
-          onAdd={addConnection}
-          onClose={() => setModal(null)}
+          onClose={closeConnectionModal}
           onOpenSettings={() => {
-            setModal(null)
+            closeConnectionModal()
             openSettings('technical')
           }}
+          onSave={saveConnection}
         />
       )}
     </div>
@@ -999,6 +1027,7 @@ function GroupDashboard({
   onAddConnection,
   onDeleteConnection,
   onDeleteGroup,
+  onEditConnection,
   onEditGroup,
   onLoadMoreArrivals,
   onToggleConnectionVisibility,
@@ -1014,6 +1043,7 @@ function GroupDashboard({
   onAddConnection: () => void
   onDeleteConnection: (connectionId: string) => void
   onDeleteGroup: () => void
+  onEditConnection: (connectionId: string) => void
   onEditGroup: () => void
   onLoadMoreArrivals: () => void
   onToggleConnectionVisibility: (
@@ -1156,6 +1186,7 @@ function GroupDashboard({
               isRefreshing={isRefreshing || !hasData}
               now={now}
               onDeleteConnection={onDeleteConnection}
+              onEditConnection={onEditConnection}
               onSortModeChange={setGroupedSortMode}
               sortMode={groupedSortMode}
             />
@@ -1373,6 +1404,7 @@ function GroupedArrivalsView({
   now,
   isRefreshing,
   onDeleteConnection,
+  onEditConnection,
   onSortModeChange,
   sortMode,
 }: {
@@ -1380,6 +1412,7 @@ function GroupedArrivalsView({
   now: number
   isRefreshing: boolean
   onDeleteConnection: (connectionId: string) => void
+  onEditConnection: (connectionId: string) => void
   onSortModeChange: (sortMode: GroupedSortMode) => void
   sortMode: GroupedSortMode
 }) {
@@ -1432,6 +1465,7 @@ function GroupedArrivalsView({
             key={connectionResult.connection.id}
             now={now}
             onDelete={() => onDeleteConnection(connectionResult.connection.id)}
+            onEdit={() => onEditConnection(connectionResult.connection.id)}
           />
         ))}
       </div>
@@ -1444,11 +1478,13 @@ function ConnectionCard({
   now,
   isRefreshing,
   onDelete,
+  onEdit,
 }: {
   connectionResult: ConnectionDepartures
   now: number
   isRefreshing: boolean
   onDelete: () => void
+  onEdit: () => void
 }) {
   const { connection, arrivals, error } = connectionResult
   const color = getModeColor(connection.routeType, connection.routeColor)
@@ -1468,18 +1504,28 @@ function ConnectionCard({
             <p>{connection.stopName}</p>
           </div>
         </div>
-        <button
-          aria-label={`${connection.routeName} törlése`}
-          className="subtle-icon-button"
-          onClick={() => {
-            if (window.confirm('Törlöd ezt a figyelt járatot?')) {
-              onDelete()
-            }
-          }}
-          type="button"
-        >
-          <Icon name="trash" size={16} />
-        </button>
+        <div className="connection-card-actions">
+          <button
+            aria-label={`${connection.routeName} módosítása`}
+            className="subtle-icon-button"
+            onClick={onEdit}
+            type="button"
+          >
+            <Icon name="edit" size={16} />
+          </button>
+          <button
+            aria-label={`${connection.routeName} törlése`}
+            className="subtle-icon-button danger-on-hover"
+            onClick={() => {
+              if (window.confirm('Törlöd ezt a figyelt járatot?')) {
+                onDelete()
+              }
+            }}
+            type="button"
+          >
+            <Icon name="trash" size={16} />
+          </button>
+        </div>
       </div>
       {connection.stopDirection && (
         <div className="direction-label">
@@ -1700,22 +1746,38 @@ function GroupModal({
 
 function ConnectionModal({
   apiKey,
+  editingConnection,
   existingConnections,
-  onAdd,
   onClose,
   onOpenSettings,
+  onSave,
 }: {
   apiKey: string
+  editingConnection?: SavedConnection
   existingConnections: SavedConnection[]
-  onAdd: (connection: SavedConnection) => boolean
   onClose: () => void
   onOpenSettings: () => void
+  onSave: (connection: SavedConnection) => boolean
 }) {
-  const [routeQuery, setRouteQuery] = useState('')
+  const isEditing = editingConnection !== undefined
+  const [routeQuery, setRouteQuery] = useState(
+    editingConnection?.routeName ?? '',
+  )
   const [routeResults, setRouteResults] = useState<RouteReference[]>([])
   const [routeStops, setRouteStops] = useState<RouteStopsResult>()
   const [selectedDirectionId, setSelectedDirectionId] = useState('')
-  const [selectedRoute, setSelectedRoute] = useState<RouteReference>()
+  const [selectedRoute, setSelectedRoute] = useState<RouteReference | undefined>(
+    () =>
+      editingConnection
+        ? {
+            id: editingConnection.routeId,
+            shortName: editingConnection.routeName,
+            type: editingConnection.routeType,
+            color: editingConnection.routeColor,
+            textColor: editingConnection.routeTextColor,
+          }
+        : undefined,
+  )
   const [selectedStop, setSelectedStop] = useState<RouteStopOption>()
   const [searching, setSearching] = useState(false)
   const [loadingStops, setLoadingStops] = useState(false)
@@ -1736,11 +1798,35 @@ function ConnectionModal({
     setSelectedStop(undefined)
     setLoadingStops(true)
     setError('')
+    const shouldRestoreEditingSelection =
+      editingConnection !== undefined &&
+      selectedRoute.id === editingConnection.routeId
 
     void getStopsForRoute(selectedRoute.id, apiKey)
       .then((result) => {
         if (!cancelled) {
           setRouteStops(result)
+          if (shouldRestoreEditingSelection && editingConnection) {
+            const matchingStop = result.stops.find(
+              (option) => option.stop.id === editingConnection.stopId,
+            )
+            const matchingDirection = result.directions.find(
+              (direction) =>
+                direction.id === matchingStop?.directionId ||
+                direction.label === editingConnection.stopDirection,
+            )
+            const directionId =
+              matchingStop?.directionId ?? matchingDirection?.id ?? ''
+
+            setSelectedDirectionId(directionId)
+            setSelectedStop(
+              result.stops.find(
+                (option) =>
+                  option.stop.id === editingConnection.stopId &&
+                  option.directionId === directionId,
+              ) ?? matchingStop,
+            )
+          }
           if (result.directions.length === 0 || result.stops.length === 0) {
             setError('Ehhez a járathoz nem sikerült megállókat betölteni.')
           }
@@ -1760,7 +1846,7 @@ function ConnectionModal({
     return () => {
       cancelled = true
     }
-  }, [apiKey, selectedRoute])
+  }, [apiKey, editingConnection, selectedRoute])
 
   const selectedDirectionStops = useMemo(
     () =>
@@ -1805,7 +1891,7 @@ function ConnectionModal({
     }
 
     const connection: SavedConnection = {
-      id: createId('connection'),
+      id: editingConnection?.id ?? createId('connection'),
       routeId: selectedRoute.id,
       routeName: getRouteName(selectedRoute),
       routeType: selectedRoute.type ?? 'BUS',
@@ -1821,6 +1907,7 @@ function ConnectionModal({
     if (
       existingConnections.some(
         (existing) =>
+          existing.id !== connection.id &&
           existing.routeId === connection.routeId &&
           existing.stopId === connection.stopId,
       )
@@ -1829,13 +1916,18 @@ function ConnectionModal({
       return
     }
 
-    if (onAdd(connection)) {
+    if (onSave(connection)) {
       onClose()
+    } else {
+      setError('Ezt a járatot és megállót már figyeled ebben a csoportban.')
     }
   }
 
   return (
-    <Modal onClose={onClose} title="Járat hozzáadása">
+    <Modal
+      onClose={onClose}
+      title={isEditing ? 'Járat módosítása' : 'Járat hozzáadása'}
+    >
       <form
         autoComplete="off"
         className="modal-form connection-form"
@@ -1857,8 +1949,9 @@ function ConnectionModal({
         ) : (
           <>
             <p className="modal-intro">
-              Keresd meg a járatot. A kiválasztás után a hozzá tartozó
-              megállók közül választhatsz.
+              {isEditing
+                ? 'Módosítsd a járatot, az irányt vagy a megállót.'
+                : 'Keresd meg a járatot. A kiválasztás után a hozzá tartozó megállók közül választhatsz.'}
             </p>
             <SearchField
               label="Járat"
@@ -1933,8 +2026,8 @@ function ConnectionModal({
               disabled={!selectedRoute || !selectedStop}
               type="submit"
             >
-              Hozzáadás
-              <Icon name="plus" size={16} />
+              {isEditing ? 'Mentés' : 'Hozzáadás'}
+              <Icon name={isEditing ? 'check' : 'plus'} size={16} />
             </button>
           )}
         </div>

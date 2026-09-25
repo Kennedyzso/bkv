@@ -1143,6 +1143,12 @@ h3 {
   gap: 12px;
 }
 
+.connection-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
 .connection-identity {
   min-width: 0;
   gap: 10px;
