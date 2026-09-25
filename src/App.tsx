@@ -920,6 +920,14 @@ function GroupTabs({
   return (
     <div className="group-tabs-wrap">
       <div className="group-tabs" role="tablist" aria-label="Csoportok">
+        <button
+          aria-label="Új csoport"
+          className="add-tab"
+          onClick={onAdd}
+          type="button"
+        >
+          <Icon name="plus" size={18} />
+        </button>
         {groups.map((group) => (
           <button
             aria-selected={group.id === activeGroupId}
@@ -933,14 +941,6 @@ function GroupTabs({
             <span className="group-tab-count">{group.connections.length}</span>
           </button>
         ))}
-        <button
-          aria-label="Új csoport"
-          className="add-tab"
-          onClick={onAdd}
-          type="button"
-        >
-          <Icon name="plus" size={18} />
-        </button>
       </div>
     </div>
   )
