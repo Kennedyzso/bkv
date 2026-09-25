@@ -9,7 +9,9 @@ láthatja.
 
 - csoportok létrehozása és törlése;
 - BKK FUTÁR keresés járatra és megállóra;
+- opcionális célmegálló megadása, csak az induló megálló utáni megállókból;
 - a következő három érkezés megjelenítése figyelt járatonként;
+- célmegálló esetén a várható érkezési idő megjelenítése;
 - összesített, időrendbe rendezett nézet;
 - járatonként csoportosított nézet;
 - járatok elrejtése és visszakapcsolása lenyíló jelölőnégyzet-listából;

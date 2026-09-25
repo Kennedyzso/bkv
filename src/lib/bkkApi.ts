@@ -19,6 +19,8 @@ import type {
 
 const API_VERSION = '2'
 const APP_VERSION = 'bkv-watch/0.1.0'
+type StopTimeType = 'ARRIVAL' | 'DEPARTURE'
+
 const tripRouteCache = new Map<
   string,
   Promise<Record<string, string>>
@@ -192,19 +194,26 @@ export async function getStopsForRoute(
 export async function getArrivalsForConnection(
   connection: SavedConnection,
   apiKey: string,
+  options: {
+    stopTimeType?: StopTimeType
+    onlyDepartures?: boolean
+  } = {},
 ): Promise<BkkResponse<ArrivalsEntry>> {
   if (!hasApiKey(apiKey)) {
     throw new BkkApiError('Az érkezések lekéréséhez add meg a BKK API-kulcsot.')
   }
 
+  const stopTimeType = options.stopTimeType ?? 'DEPARTURE'
+  const onlyDepartures =
+    options.onlyDepartures ?? stopTimeType === 'DEPARTURE'
   const url = createUrl('arrivals-and-departures-for-stop', apiKey, {
     version: API_VERSION,
     appVersion: APP_VERSION,
     stopId: connection.stopId,
     includeRouteId: connection.routeId,
     includeReferences: 'routes,stops',
-    stopTimeType: 'DEPARTURE',
-    onlyDepartures: true,
+    stopTimeType,
+    onlyDepartures,
     minutesBefore: 1,
     minutesAfter: 90,
     limit: 30,

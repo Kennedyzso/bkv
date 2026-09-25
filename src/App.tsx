@@ -266,6 +266,7 @@ function mapArrivalsForConnection(
   connection: SavedConnection,
   response: BkkResponse<ArrivalsEntry>,
   tripRouteIds: Record<string, string>,
+  stopTimeType: 'ARRIVAL' | 'DEPARTURE' = 'DEPARTURE',
 ): Arrival[] {
   const entry = response.data?.entry
   const routes = getRoutes(response.data?.references)
@@ -280,7 +281,9 @@ function mapArrivalsForConnection(
   return (entry?.stopTimes ?? [])
     .map((stopTime): Arrival | null => {
       const timestamp =
-        stopTime.predictedDepartureTime ?? stopTime.departureTime
+        stopTimeType === 'ARRIVAL'
+          ? stopTime.predictedArrivalTime ?? stopTime.arrivalTime
+          : stopTime.predictedDepartureTime ?? stopTime.departureTime
 
       if (!timestamp || timestamp < serverNow - 15) {
         return null
@@ -296,6 +299,7 @@ function mapArrivalsForConnection(
       return {
         id: `${connection.id}-${stopTime.tripId}`,
         connectionId: connection.id,
+        tripId: stopTime.tripId,
         routeId: route?.id ?? connection.routeId,
         routeName: route ? getRouteName(route) : connection.routeName,
         routeType: route?.type ?? connection.routeType,
@@ -316,12 +320,54 @@ function mapArrivalsForConnection(
           0,
           Math.round((timestamp - serverNow) / 60),
         ),
-        isRealtime: stopTime.predictedDepartureTime !== undefined,
+        isRealtime:
+          stopTimeType === 'ARRIVAL'
+            ? stopTime.predictedArrivalTime !== undefined
+            : stopTime.predictedDepartureTime !== undefined,
         uncertain: stopTime.uncertain ?? false,
       }
     })
     .filter((arrival): arrival is Arrival => arrival !== null)
     .sort((a, b) => a.timestamp - b.timestamp)
+}
+
+function attachDestinationTimes(
+  connection: SavedConnection,
+  arrivals: Arrival[],
+  destinationResponse: BkkResponse<ArrivalsEntry> | undefined,
+  tripRouteIds: Record<string, string>,
+): Arrival[] {
+  if (!connection.destinationStopId) {
+    return arrivals
+  }
+
+  const destinationConnection: SavedConnection = {
+    ...connection,
+    id: `${connection.id}-destination`,
+    stopId: connection.destinationStopId,
+    stopName: connection.destinationStopName ?? connection.destinationStopId,
+  }
+  const destinationArrivals = destinationResponse
+    ? mapArrivalsForConnection(
+        destinationConnection,
+        destinationResponse,
+        tripRouteIds,
+        'ARRIVAL',
+      )
+    : []
+  const destinationByTripId = new Map(
+    destinationArrivals.map((arrival) => [arrival.tripId, arrival]),
+  )
+
+  return arrivals.map((arrival) => {
+    const destinationArrival = destinationByTripId.get(arrival.tripId)
+    return {
+      ...arrival,
+      destinationStopName:
+        connection.destinationStopName ?? connection.destinationStopId,
+      destinationTimestamp: destinationArrival?.timestamp,
+    }
+  })
 }
 
 function App() {
@@ -420,19 +466,43 @@ function App() {
               .map(
                 async (connection): Promise<ConnectionDepartures> => {
                   try {
-                    const [response, tripRouteIds] = await Promise.all([
-                      getArrivalsForConnection(
-                        connection,
-                        appState.settings.apiKey,
-                      ),
-                      getTripRouteIdsForStop(
-                        connection.stopId,
-                        appState.settings.apiKey,
-                      ),
-                    ])
-                    const arrivals = mapArrivalsForConnection(
+                    const destinationResponsePromise = connection.destinationStopId
+                      ? getArrivalsForConnection(
+                          {
+                            ...connection,
+                            id: `${connection.id}-destination`,
+                            stopId: connection.destinationStopId,
+                            stopName:
+                              connection.destinationStopName ??
+                              connection.destinationStopId,
+                          },
+                          appState.settings.apiKey,
+                          {
+                            stopTimeType: 'ARRIVAL',
+                            onlyDepartures: false,
+                          },
+                        ).catch(() => undefined)
+                      : Promise.resolve(undefined)
+                    const [response, tripRouteIds, destinationResponse] =
+                      await Promise.all([
+                        getArrivalsForConnection(
+                          connection,
+                          appState.settings.apiKey,
+                        ),
+                        getTripRouteIdsForStop(
+                          connection.stopId,
+                          appState.settings.apiKey,
+                        ),
+                        destinationResponsePromise,
+                      ])
+                    const arrivals = attachDestinationTimes(
                       connection,
-                      response,
+                      mapArrivalsForConnection(
+                        connection,
+                        response,
+                        tripRouteIds,
+                      ),
+                      destinationResponse,
                       tripRouteIds,
                     )
 
@@ -1388,6 +1458,9 @@ function ConnectionVisibilityFilter({
                     {connection.stopDirection
                       ? ` · ${connection.stopDirection}`
                       : ''}
+                    {connection.destinationStopName
+                      ? ` → ${connection.destinationStopName}`
+                      : ''}
                   </span>
                 </span>
               </label>
@@ -1501,7 +1574,12 @@ function ConnectionCard({
           />
           <div>
             <h3>{connection.routeName}</h3>
-            <p>{connection.stopName}</p>
+            <p>
+              {connection.stopName}
+              {connection.destinationStopName
+                ? ` → ${connection.destinationStopName}`
+                : ''}
+            </p>
           </div>
         </div>
         <div className="connection-card-actions">
@@ -1590,6 +1668,14 @@ function ArrivalCard({
           {arrival.isRealtime ? '● Valós idejű adat' : '○ Menetrend szerint'}
           {arrival.uncertain ? ' · bizonytalan' : ''}
         </span>
+        {arrival.destinationStopName && (
+          <span className="arrival-destination">
+            Cél: {arrival.destinationStopName} ·{' '}
+            {arrival.destinationTimestamp
+              ? formatDestinationArrival(arrival.destinationTimestamp, now)
+              : 'nincs adat'}
+          </span>
+        )}
       </div>
       <TimeDisplay arrival={arrival} now={now} />
     </article>
@@ -1608,6 +1694,14 @@ function MiniArrival({ arrival, now }: { arrival: Arrival; now: number }) {
         >
           {arrival.isRealtime ? '● Valós idő' : '○ Menetrend'}
         </span>
+        {arrival.destinationStopName && (
+          <span className="mini-arrival-destination">
+            Cél: {arrival.destinationStopName} ·{' '}
+            {arrival.destinationTimestamp
+              ? formatDestinationArrival(arrival.destinationTimestamp, now)
+              : 'nincs adat'}
+          </span>
+        )}
       </div>
       <TimeDisplay arrival={arrival} now={now} compact />
     </div>
@@ -1634,6 +1728,14 @@ function TimeDisplay({
       <span>{formatTime(arrival.timestamp)}</span>
     </div>
   )
+}
+
+function formatDestinationArrival(timestamp: number, now: number): string {
+  const minutes = Math.max(
+    0,
+    Math.round((timestamp - now / 1000) / 60),
+  )
+  return `${minutes === 0 ? 'Most' : `${minutes} perc`} · ${formatTime(timestamp)}`
 }
 
 function RouteBadge({
@@ -1779,6 +1881,8 @@ function ConnectionModal({
         : undefined,
   )
   const [selectedStop, setSelectedStop] = useState<RouteStopOption>()
+  const [selectedDestinationStop, setSelectedDestinationStop] =
+    useState<RouteStopOption>()
   const [searching, setSearching] = useState(false)
   const [loadingStops, setLoadingStops] = useState(false)
   const [error, setError] = useState('')
@@ -1788,6 +1892,7 @@ function ConnectionModal({
       setRouteStops(undefined)
       setSelectedDirectionId('')
       setSelectedStop(undefined)
+      setSelectedDestinationStop(undefined)
       setLoadingStops(false)
       return
     }
@@ -1796,6 +1901,7 @@ function ConnectionModal({
     setRouteStops(undefined)
     setSelectedDirectionId('')
     setSelectedStop(undefined)
+    setSelectedDestinationStop(undefined)
     setLoadingStops(true)
     setError('')
     const shouldRestoreEditingSelection =
@@ -1817,6 +1923,16 @@ function ConnectionModal({
             )
             const directionId =
               matchingStop?.directionId ?? matchingDirection?.id ?? ''
+            const directionStops = result.stops.filter(
+              (option) => option.directionId === directionId,
+            )
+            const originIndex = directionStops.findIndex(
+              (option) => option.stop.id === editingConnection.stopId,
+            )
+            const matchingDestinationStop = directionStops.find(
+              (option) =>
+                option.stop.id === editingConnection.destinationStopId,
+            )
 
             setSelectedDirectionId(directionId)
             setSelectedStop(
@@ -1825,6 +1941,13 @@ function ConnectionModal({
                   option.stop.id === editingConnection.stopId &&
                   option.directionId === directionId,
               ) ?? matchingStop,
+            )
+            setSelectedDestinationStop(
+              originIndex >= 0 &&
+                matchingDestinationStop !== undefined &&
+                directionStops.indexOf(matchingDestinationStop) > originIndex
+                ? matchingDestinationStop
+                : undefined,
             )
           }
           if (result.directions.length === 0 || result.stops.length === 0) {
@@ -1855,6 +1978,16 @@ function ConnectionModal({
       ) ?? [],
     [routeStops, selectedDirectionId],
   )
+  const destinationStopOptions = useMemo(() => {
+    if (!selectedStop) {
+      return []
+    }
+
+    const originIndex = selectedDirectionStops.findIndex(
+      (option) => option.stop.id === selectedStop.stop.id,
+    )
+    return originIndex >= 0 ? selectedDirectionStops.slice(originIndex + 1) : []
+  }, [selectedDirectionStops, selectedStop])
 
   async function search(query: string) {
     if (!query.trim()) {
@@ -1902,6 +2035,10 @@ function ConnectionModal({
       stopName: getStopName(selectedStop.stop),
       stopDirection:
         selectedStop.directionLabel || selectedStop.stop.direction,
+      destinationStopId: selectedDestinationStop?.stop.id,
+      destinationStopName: selectedDestinationStop
+        ? getStopName(selectedDestinationStop.stop)
+        : undefined,
     }
 
     if (
@@ -1973,6 +2110,7 @@ function ConnectionModal({
                       setRouteStops(undefined)
                       setSelectedDirectionId('')
                       setSelectedStop(undefined)
+                      setSelectedDestinationStop(undefined)
                       setError('')
                     }}
                     route={route}
@@ -1994,6 +2132,7 @@ function ConnectionModal({
                 onChange={(value) => {
                   setSelectedDirectionId(value)
                   setSelectedStop(undefined)
+                  setSelectedDestinationStop(undefined)
                 }}
                 selectedValue={selectedDirectionId}
               />
@@ -2003,14 +2142,33 @@ function ConnectionModal({
               <RouteStopsSelect
                 loading={loadingStops}
                 onChange={(value) =>
-                  setSelectedStop(
-                    selectedDirectionStops.find(
+                  {
+                    setSelectedStop(
+                      selectedDirectionStops.find(
+                        (option) => option.value === value,
+                      ),
+                    )
+                    setSelectedDestinationStop(undefined)
+                  }
+                }
+                options={selectedDirectionStops}
+                selectedValue={selectedStop?.value ?? ''}
+              />
+            )}
+            {selectedStop && destinationStopOptions.length > 0 && (
+              <RouteStopsSelect
+                label="Célmegálló (opcionális)"
+                loading={loadingStops}
+                onChange={(value) =>
+                  setSelectedDestinationStop(
+                    destinationStopOptions.find(
                       (option) => option.value === value,
                     ),
                   )
                 }
-                options={selectedDirectionStops}
-                selectedValue={selectedStop?.value ?? ''}
+                options={destinationStopOptions}
+                placeholder="Nem adok meg célmegállót"
+                selectedValue={selectedDestinationStop?.value ?? ''}
               />
             )}
           </>
@@ -2127,12 +2285,16 @@ function RouteDirectionSelect({
 }
 
 function RouteStopsSelect({
+  label = 'Megálló',
   options,
+  placeholder = 'Válassz megállót…',
   selectedValue,
   loading,
   onChange,
 }: {
+  label?: string
   options: RouteStopOption[]
+  placeholder?: string
   selectedValue: string
   loading: boolean
   onChange: (value: string) => void
@@ -2150,7 +2312,7 @@ function RouteStopsSelect({
 
   return (
     <label className="select-field">
-      <span className="field-label">Megálló</span>
+      <span className="field-label">{label}</span>
       {loading ? (
         <div className="select-loading">
           <Icon name="refresh" size={16} />
@@ -2164,7 +2326,7 @@ function RouteStopsSelect({
             onChange={(event) => onChange(event.target.value)}
             value={selectedValue}
           >
-            <option value="">Válassz megállót…</option>
+            <option value="">{placeholder}</option>
             {Array.from(groupedOptions.entries()).map(([label, stops]) => (
               <optgroup key={label} label={`${label} felé`}>
                 {stops.map((option) => (

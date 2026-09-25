@@ -22,6 +22,8 @@ export interface SavedConnection {
   stopId: string
   stopName: string
   stopDirection?: string
+  destinationStopId?: string
+  destinationStopName?: string
 }
 
 export interface CommuteGroup {
@@ -169,6 +171,7 @@ export interface SearchResponse extends BkkResponse<SearchEntry> {
 export interface Arrival {
   id: string
   connectionId: string
+  tripId: string
   routeId: string
   routeName: string
   routeType: TransportMode
@@ -177,6 +180,8 @@ export interface Arrival {
   stopId: string
   stopName: string
   destination: string
+  destinationStopName?: string
+  destinationTimestamp?: number
   timestamp: number
   minutes: number
   isRealtime: boolean

@@ -73,6 +73,14 @@ function normalizeConnection(value: unknown): SavedConnection | null {
       typeof value.stopDirection === 'string'
         ? value.stopDirection
         : undefined,
+    destinationStopId:
+      typeof value.destinationStopId === 'string'
+        ? value.destinationStopId
+        : undefined,
+    destinationStopName:
+      typeof value.destinationStopName === 'string'
+        ? value.destinationStopName
+        : undefined,
   }
 }
 

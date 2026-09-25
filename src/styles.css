@@ -1086,6 +1086,13 @@ h3 {
   color: #8c889b;
 }
 
+.arrival-details .arrival-destination {
+  margin-top: 5px;
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .time-display {
   display: grid;
   justify-items: end;
@@ -1237,6 +1244,18 @@ h3 {
 
 .mini-arrival-status.is-scheduled {
   color: #8c889b;
+}
+
+.mini-arrival-destination {
+  display: block;
+  max-width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--purple);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .connection-empty,
