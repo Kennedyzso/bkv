@@ -1396,8 +1396,7 @@ h3 {
   min-width: 0;
 }
 
-.connection-identity h3,
-.connection-identity p {
+.connection-identity h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1411,8 +1410,10 @@ h3 {
 
 .connection-identity p {
   margin-bottom: 0;
+  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.35;
 }
 
 .direction-label {

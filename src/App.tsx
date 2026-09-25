@@ -2028,6 +2028,7 @@ function ConnectionCard({
 }) {
   const { connection, arrivals, error } = connectionResult
   const color = getModeColor(connection.routeType, connection.routeColor)
+  const direction = connection.stopDirection || arrivals[0]?.destination
 
   return (
     <article className="connection-card">
@@ -2096,10 +2097,10 @@ function ConnectionCard({
           </button>
         </div>
       </div>
-      {connection.stopDirection && (
+      {direction && (
         <div className="direction-label">
           <Icon name="arrow" size={14} />
-          {connection.stopDirection}
+          {direction}
         </div>
       )}
       {error ? (
@@ -2238,7 +2239,6 @@ function MiniArrival({
       }`}
     >
       <div>
-        <strong>{arrival.destination}</strong>
         <span
           className={`mini-arrival-status ${
             arrival.isRealtime ? 'is-realtime' : 'is-scheduled'
@@ -2248,7 +2248,7 @@ function MiniArrival({
         </span>
         {arrival.destinationStopName && (
           <span className="mini-arrival-destination">
-            Cél: {arrival.destinationStopName} ·{' '}
+            Érkezés:{' '}
             {arrival.destinationTimestamp
               ? formatDestinationArrival(
                   arrival.destinationTimestamp,
