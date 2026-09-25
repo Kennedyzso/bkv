@@ -197,6 +197,9 @@ export async function getArrivalsForConnection(
   options: {
     stopTimeType?: StopTimeType
     onlyDepartures?: boolean
+    time?: number
+    minutesBefore?: number
+    minutesAfter?: number
   } = {},
 ): Promise<BkkResponse<ArrivalsEntry>> {
   if (!hasApiKey(apiKey)) {
@@ -214,10 +217,10 @@ export async function getArrivalsForConnection(
     includeReferences: 'routes,stops',
     stopTimeType,
     onlyDepartures,
-    minutesBefore: 1,
-    minutesAfter: 90,
+    minutesBefore: options.minutesBefore ?? 1,
+    minutesAfter: options.minutesAfter ?? 90,
     limit: 30,
-    time: Math.floor(Date.now() / 1000),
+    time: options.time ?? Math.floor(Date.now() / 1000),
   })
 
   return getJson<BkkResponse<ArrivalsEntry>>(url)

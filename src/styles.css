@@ -922,6 +922,100 @@ h3 {
   font-size: 11px;
 }
 
+.departure-time-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 220px) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.departure-time-picker.is-planning {
+  border-color: #d9d3f4;
+  background: var(--purple-pale);
+}
+
+.departure-time-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--purple);
+}
+
+.departure-time-summary > .icon {
+  flex: 0 0 auto;
+}
+
+.departure-time-summary strong,
+.departure-time-summary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.departure-time-summary strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.departure-time-summary span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.departure-time-field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.departure-time-field > span {
+  color: var(--muted-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.departure-time-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid #dcd9e5;
+  border-radius: 9px;
+  outline: 0;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.departure-time-field input:focus {
+  border-color: #9c95d4;
+  box-shadow: 0 0 0 3px rgba(49, 39, 131, 0.09);
+}
+
+.departure-time-reset {
+  align-self: end;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #c9c4e8;
+  border-radius: 9px;
+  color: var(--purple);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.departure-time-reset:hover {
+  background: var(--purple-soft);
+}
+
 .pinned-arrivals-section {
   margin-bottom: 17px;
 }
@@ -2148,6 +2242,14 @@ h3 {
 }
 
 @media (max-width: 767px) {
+  .departure-time-picker {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .departure-time-summary {
+    grid-column: 1 / -1;
+  }
+
   html,
   body,
   .search-results,

@@ -454,6 +454,9 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [now, setNow] = useState(() => Date.now())
+  const [departureQueryTime, setDepartureQueryTime] = useState<number | null>(
+    null,
+  )
   const [isPageVisible, setIsPageVisible] = useState(
     () =>
       typeof document === 'undefined' ||
@@ -551,6 +554,13 @@ function App() {
     refreshInFlight.current.add(groupToRefresh.id)
     setIsRefreshing(true)
     setFetchError('')
+    const queryTime =
+      departureQueryTime ?? Math.floor(Date.now() / 1000)
+    const queryOptions = {
+      time: queryTime,
+      minutesBefore: departureQueryTime ? 0 : 1,
+      minutesAfter: 90,
+    }
 
     try {
       const refreshedGroups = await Promise.all(
@@ -573,6 +583,7 @@ function App() {
                           {
                             stopTimeType: 'ARRIVAL',
                             onlyDepartures: false,
+                            ...queryOptions,
                           },
                         ).catch(() => undefined)
                       : Promise.resolve(undefined)
@@ -581,6 +592,7 @@ function App() {
                         getArrivalsForConnection(
                           connection,
                           appState.settings.apiKey,
+                          queryOptions,
                         ),
                         getTripRouteIdsForStop(
                           connection.stopId,
@@ -664,7 +676,12 @@ function App() {
       refreshInFlight.current.delete(groupToRefresh.id)
       setIsRefreshing(refreshInFlight.current.size > 0)
     }
-  }, [activeGroupId, appState.groups, appState.settings.apiKey])
+  }, [
+    activeGroupId,
+    appState.groups,
+    appState.settings.apiKey,
+    departureQueryTime,
+  ])
 
   useEffect(() => {
     if (
@@ -749,6 +766,11 @@ function App() {
       ...current,
       [groupId]: (current[groupId] ?? 0) + ARRIVALS_LOAD_MORE_STEP,
     }))
+  }
+
+  function updateDepartureQueryTime(timestamp: number | null): void {
+    setDepartureQueryTime(timestamp)
+    setAdditionalArrivalsByGroup({})
   }
 
   function togglePinnedArrival(groupId: string, arrival: Arrival): void {
@@ -1084,6 +1106,8 @@ function App() {
                 onLoadMoreArrivals={() => loadMoreArrivals(activeGroup.id)}
                 onTogglePin={togglePinnedArrival}
                 onToggleConnectionVisibility={toggleConnectionVisibility}
+                departureQueryTime={departureQueryTime}
+                onDepartureQueryTimeChange={updateDepartureQueryTime}
                 pinnedArrivals={pinnedArrivalsByGroup[activeGroup.id] ?? []}
                 onViewModeChange={setViewMode}
                 viewMode={viewMode}
@@ -1258,6 +1282,8 @@ function GroupDashboard({
   onTogglePin,
   onToggleConnectionVisibility,
   onViewModeChange,
+  departureQueryTime,
+  onDepartureQueryTimeChange,
   pinnedArrivals,
 }: {
   group: CommuteGroup
@@ -1279,6 +1305,8 @@ function GroupDashboard({
     connectionId: string,
   ) => void
   onViewModeChange: (viewMode: ViewMode) => void
+  departureQueryTime: number | null
+  onDepartureQueryTimeChange: (timestamp: number | null) => void
   pinnedArrivals: PinnedArrival[]
 }) {
   const hasData = departures !== undefined
@@ -1407,6 +1435,12 @@ function GroupDashboard({
             }
           />
 
+          <DepartureTimePicker
+            now={now}
+            onChange={onDepartureQueryTimeChange}
+            value={departureQueryTime}
+          />
+
           <DataStatus
             departures={departures}
             hasData={hasData}
@@ -1473,6 +1507,71 @@ function GroupDashboard({
         </>
       )}
     </section>
+  )
+}
+
+function DepartureTimePicker({
+  now,
+  value,
+  onChange,
+}: {
+  now: number
+  value: number | null
+  onChange: (timestamp: number | null) => void
+}) {
+  const isPlanning = value !== null
+  const maxPlanningTime = getOneMonthLater(now)
+
+  return (
+    <div
+      className={`departure-time-picker ${
+        isPlanning ? 'is-planning' : ''
+      }`}
+    >
+      <div className="departure-time-summary">
+        <Icon name="clock" size={18} />
+        <div>
+          <strong>{isPlanning ? 'Tervezett indulások' : 'Élő indulások'}</strong>
+          <span>
+            {value !== null
+              ? formatPlanningDateTime(value)
+              : 'A következő járatok mostantól'}
+          </span>
+        </div>
+      </div>
+      <label className="departure-time-field">
+        <span>Indulás ettől</span>
+        <input
+          aria-label="Indulások kezdő időpontja"
+          autoComplete="off"
+          max={formatDateTimeInput(maxPlanningTime)}
+          min={formatDateTimeInput(now)}
+          onChange={(event) => {
+            const timestamp = parseDateTimeInput(event.target.value)
+            if (timestamp === null) {
+              onChange(null)
+            } else if (
+              timestamp > Math.floor(now / 1000) &&
+              timestamp <= Math.floor(maxPlanningTime / 1000)
+            ) {
+              onChange(timestamp)
+            }
+          }}
+          type="datetime-local"
+          value={value === null ? '' : formatDateTimeInput(value * 1000)}
+        />
+      </label>
+      {isPlanning && (
+        <button
+          aria-label="Visszaállítás élő indulásokra"
+          className="departure-time-reset"
+          onClick={() => onChange(null)}
+          type="button"
+        >
+          Most
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -2006,7 +2105,11 @@ function MiniArrival({
           <span className="mini-arrival-destination">
             Cél: {arrival.destinationStopName} ·{' '}
             {arrival.destinationTimestamp
-              ? formatDestinationArrival(arrival.destinationTimestamp, now)
+              ? formatDestinationArrival(
+                  arrival.destinationTimestamp,
+                  now,
+                  true,
+                )
               : 'nincs adat'}
           </span>
         )}
@@ -2053,7 +2156,7 @@ function TimeDisplay({
   return (
     <div className={`time-display ${compact ? 'is-compact' : ''}`}>
       {label && <span className="time-display-label">{label}</span>}
-      <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
+      <strong>{formatRelativeMinutes(minutes, compact)}</strong>
       <span>{formatTime(arrival.timestamp)}</span>
     </div>
   )
@@ -2096,18 +2199,51 @@ function DestinationTimeDisplay({
           ? `Érkezés: ${arrival.destinationStopName}`
           : 'Célba érkezik'}
       </span>
-      <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
+      <strong>{formatRelativeMinutes(minutes)}</strong>
       <span>{formatTime(arrival.destinationTimestamp)}</span>
     </div>
   )
 }
 
-function formatDestinationArrival(timestamp: number, now: number): string {
+function formatDestinationArrival(
+  timestamp: number,
+  now: number,
+  compact = false,
+): string {
   const minutes = Math.max(
     0,
     Math.round((timestamp - now / 1000) / 60),
   )
-  return `${minutes === 0 ? 'Most' : `${minutes} perc`} · ${formatTime(timestamp)}`
+  return `${formatRelativeMinutes(minutes, compact)} · ${formatTime(timestamp)}`
+}
+
+function formatRelativeMinutes(minutes: number, compact = false): string {
+  if (minutes === 0) {
+    return 'Most'
+  }
+
+  if (minutes < 60) {
+    return `${minutes} perc`
+  }
+
+  const totalHours = Math.floor(minutes / 60)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+
+  if (days > 0) {
+    return compact
+      ? `${days} nap`
+      : `${days} nap${hours > 0 ? ` ${hours} óra` : ''}`
+  }
+
+  if (compact) {
+    return `${totalHours} óra`
+  }
+
+  const remainingMinutes = minutes % 60
+  return `${totalHours} óra${
+    remainingMinutes > 0 ? ` ${remainingMinutes} perc` : ''
+  }`
 }
 
 function RouteBadge({
@@ -3406,6 +3542,40 @@ function SettingsView({
       </div>
     </section>
   )
+}
+
+function formatDateTimeInput(timestamp: number): string {
+  const date = new Date(timestamp)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  ].join('T')
+}
+
+function getOneMonthLater(timestamp: number): number {
+  const date = new Date(timestamp)
+  date.setMonth(date.getMonth() + 1)
+  return date.getTime()
+}
+
+function parseDateTimeInput(value: string): number | null {
+  if (!value) {
+    return null
+  }
+
+  const timestamp = new Date(value).getTime()
+  return Number.isNaN(timestamp) ? null : Math.floor(timestamp / 1000)
+}
+
+function formatPlanningDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat('hu-HU', {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+  }).format(new Date(timestamp * 1000))
 }
 
 function formatTime(timestamp: number): string {
