@@ -988,7 +988,10 @@ h3 {
 }
 
 .departure-time-field input {
+  display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 36px;
   padding: 0 8px;
   border: 1px solid #dcd9e5;

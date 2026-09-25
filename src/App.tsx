@@ -1570,6 +1570,8 @@ function DepartureTimePicker({
 }) {
   const isPlanning = value !== null
   const maxPlanningTime = getOneMonthLater(now)
+  const minPlanningTimestamp = Math.floor(now / 1000)
+  const maxPlanningTimestamp = Math.floor(maxPlanningTime / 1000)
   const committedValue = value === null ? '' : formatDateTimeInput(value * 1000)
   const [draftValue, setDraftValue] = useState(committedValue)
   const hasDraftChanges = draftValue !== committedValue
@@ -1589,10 +1591,26 @@ function DepartureTimePicker({
     }
 
     if (
-      timestamp > Math.floor(now / 1000) &&
-      timestamp <= Math.floor(maxPlanningTime / 1000)
+      timestamp > minPlanningTimestamp &&
+      timestamp <= maxPlanningTimestamp
     ) {
       onChange(timestamp)
+    }
+  }
+
+  function handleDraftChange(nextValue: string): void {
+    if (nextValue === '') {
+      setDraftValue('')
+      return
+    }
+
+    const timestamp = parseDateTimeInput(nextValue)
+    if (
+      timestamp === null ||
+      (timestamp > minPlanningTimestamp &&
+        timestamp <= maxPlanningTimestamp)
+    ) {
+      setDraftValue(nextValue)
     }
   }
 
@@ -1621,7 +1639,7 @@ function DepartureTimePicker({
           max={formatDateTimeInput(maxPlanningTime)}
           min={formatDateTimeInput(now)}
           onBlur={commitDraft}
-          onChange={(event) => setDraftValue(event.target.value)}
+          onChange={(event) => handleDraftChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               commitDraft()
