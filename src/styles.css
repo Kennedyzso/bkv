@@ -2540,6 +2540,26 @@ h3 {
     gap: 8px;
   }
 
+  .arrival-card .time-display.is-destination-time {
+    display: grid;
+    grid-template-columns: auto auto;
+    width: 100%;
+    min-width: 0;
+    gap: 2px 8px;
+    justify-items: start;
+    justify-content: start;
+  }
+
+  .arrival-card .time-display.is-destination-time .time-display-label {
+    grid-column: 1 / -1;
+    max-width: 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+
   .arrival-details {
     grid-column: 2;
     grid-row: 2;
