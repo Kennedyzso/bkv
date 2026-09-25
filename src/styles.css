@@ -1115,6 +1115,10 @@ h3 {
   cursor: not-allowed;
 }
 
+.arrival-route-column .arrival-pin-button {
+  justify-self: center;
+}
+
 .arrival-details {
   min-width: 0;
 }

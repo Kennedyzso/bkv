@@ -61,7 +61,6 @@ type ViewMode = 'all' | 'grouped'
 type SettingsTab = 'technical' | 'behavior'
 type GroupedSortMode = 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
-const PINNED_EXPIRY_GRACE_SECONDS = 90
 
 type IconName =
   | 'arrow'
@@ -398,10 +397,7 @@ function updatePinnedArrivals(
     const destinationTimestamp =
       destinationArrival?.timestamp ?? pinnedArrival.destinationTimestamp
 
-    if (
-      destinationTimestamp <=
-      nowSeconds - PINNED_EXPIRY_GRACE_SECONDS
-    ) {
+    if (destinationTimestamp <= nowSeconds) {
       return []
     }
 
@@ -473,7 +469,7 @@ function App() {
         new Set(group.connections.map((connection) => connection.id)),
       ]),
     )
-    const cutoff = Date.now() / 1000 - PINNED_EXPIRY_GRACE_SECONDS
+    const cutoff = Date.now() / 1000
 
     setPinnedArrivalsByGroup((current) => {
       let changed = false
@@ -1286,8 +1282,7 @@ function GroupDashboard({
     .filter(
       (arrival) =>
         !hiddenConnectionIds.has(arrival.connectionId) &&
-        arrival.destinationTimestamp >
-          now / 1000 - PINNED_EXPIRY_GRACE_SECONDS,
+        arrival.destinationTimestamp > now / 1000,
     )
     .sort((left, right) => {
       return (
