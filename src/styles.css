@@ -1000,6 +1000,13 @@ h3 {
   box-shadow: 0 0 0 3px rgba(49, 39, 131, 0.09);
 }
 
+.departure-time-actions {
+  display: flex;
+  align-self: end;
+  gap: 6px;
+}
+
+.departure-time-apply,
 .departure-time-reset {
   align-self: end;
   min-height: 36px;
@@ -1010,6 +1017,15 @@ h3 {
   background: #fff;
   font-size: 11px;
   font-weight: 800;
+}
+
+.departure-time-apply {
+  color: #fff;
+  background: var(--purple);
+}
+
+.departure-time-apply:hover {
+  background: #241b68;
 }
 
 .departure-time-reset:hover {
@@ -2267,12 +2283,34 @@ h3 {
 }
 
 @media (max-width: 767px) {
+  .connection-card-heading {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .connection-identity {
+    flex: 1 1 150px;
+  }
+
+  .connection-card-actions {
+    margin-left: auto;
+  }
+
   .departure-time-picker {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .departure-time-summary {
     grid-column: 1 / -1;
+  }
+
+  .departure-time-field,
+  .departure-time-actions {
+    grid-column: 1;
+  }
+
+  .departure-time-actions {
+    justify-self: end;
   }
 
   html,

@@ -1385,12 +1385,6 @@ function GroupDashboard({
     .filter(
       (result): result is ConnectionDepartures => result !== undefined,
     )
-    .map((result) => ({
-      ...result,
-      arrivals: result.arrivals.filter(
-        (arrival) => !pinnedArrivalIds.has(arrival.id),
-      ),
-    }))
   const visibleArrivalsLimit = arrivalsPerConnection + additionalArrivals
   const visibleConnections = visibleDepartures.map((result) => ({
     ...result,
@@ -1576,6 +1570,31 @@ function DepartureTimePicker({
 }) {
   const isPlanning = value !== null
   const maxPlanningTime = getOneMonthLater(now)
+  const committedValue = value === null ? '' : formatDateTimeInput(value * 1000)
+  const [draftValue, setDraftValue] = useState(committedValue)
+  const hasDraftChanges = draftValue !== committedValue
+
+  useEffect(() => {
+    setDraftValue(committedValue)
+  }, [committedValue])
+
+  function commitDraft(): void {
+    const timestamp = parseDateTimeInput(draftValue)
+
+    if (timestamp === null) {
+      if (draftValue === '') {
+        onChange(null)
+      }
+      return
+    }
+
+    if (
+      timestamp > Math.floor(now / 1000) &&
+      timestamp <= Math.floor(maxPlanningTime / 1000)
+    ) {
+      onChange(timestamp)
+    }
+  }
 
   return (
     <div
@@ -1601,30 +1620,42 @@ function DepartureTimePicker({
           autoComplete="off"
           max={formatDateTimeInput(maxPlanningTime)}
           min={formatDateTimeInput(now)}
-          onChange={(event) => {
-            const timestamp = parseDateTimeInput(event.target.value)
-            if (timestamp === null) {
-              onChange(null)
-            } else if (
-              timestamp > Math.floor(now / 1000) &&
-              timestamp <= Math.floor(maxPlanningTime / 1000)
-            ) {
-              onChange(timestamp)
+          onBlur={commitDraft}
+          onChange={(event) => setDraftValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              commitDraft()
             }
           }}
           type="datetime-local"
-          value={value === null ? '' : formatDateTimeInput(value * 1000)}
+          value={draftValue}
         />
       </label>
-      {isPlanning && (
-        <button
-          aria-label="Visszaállítás élő indulásokra"
-          className="departure-time-reset"
-          onClick={() => onChange(null)}
-          type="button"
-        >
-          Most
-        </button>
+      {(hasDraftChanges || isPlanning) && (
+        <div className="departure-time-actions">
+          {hasDraftChanges && (
+            <button
+              className="departure-time-apply"
+              onClick={commitDraft}
+              type="button"
+            >
+              Alkalmaz
+            </button>
+          )}
+          {isPlanning && (
+            <button
+              aria-label="Visszaállítás élő indulásokra"
+              className="departure-time-reset"
+              onClick={() => {
+                setDraftValue('')
+                onChange(null)
+              }}
+              type="button"
+            >
+              Most
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -1677,6 +1708,7 @@ function PinnedArrivalsView({
             arrival={arrival}
             isFirst={false}
             isPinned
+            showPinnedJourney
             key={arrival.id}
             now={now}
             onTogglePin={() => onUnpin(arrival.id)}
@@ -2108,12 +2140,14 @@ function ArrivalCard({
   isFirst,
   isPinned = false,
   onTogglePin,
+  showPinnedJourney = false,
 }: {
   arrival: Arrival
   now: number
   isFirst: boolean
   isPinned?: boolean
   onTogglePin?: () => void
+  showPinnedJourney?: boolean
 }) {
   const color = getModeColor(arrival.routeType, arrival.routeColor)
   const hasReachedBoardingStop = arrival.timestamp <= now / 1000
@@ -2159,25 +2193,25 @@ function ArrivalCard({
           {arrival.uncertain ? ' · bizonytalan' : ''}
         </span>
         {arrival.destinationStopName &&
-          (!isPinned || !hasReachedBoardingStop) && (
-          <span className="arrival-destination">
-            {isPinned ? (
-              `Cél: ${arrival.destinationStopName}`
-            ) : (
-              <>
-                Cél: {arrival.destinationStopName} ·{' '}
-                {arrival.destinationTimestamp
-                  ? formatDestinationArrival(
-                      arrival.destinationTimestamp,
-                      now,
-                    )
-                  : 'nincs adat'}
-              </>
-            )}
-          </span>
-        )}
+          (!showPinnedJourney || !hasReachedBoardingStop) && (
+            <span className="arrival-destination">
+              {showPinnedJourney ? (
+                `Cél: ${arrival.destinationStopName}`
+              ) : (
+                <>
+                  Cél: {arrival.destinationStopName} ·{' '}
+                  {arrival.destinationTimestamp
+                    ? formatDestinationArrival(
+                        arrival.destinationTimestamp,
+                        now,
+                      )
+                    : 'nincs adat'}
+                </>
+              )}
+            </span>
+          )}
       </div>
-      {isPinned ? (
+      {showPinnedJourney ? (
         <PinnedArrivalTimeDisplay arrival={arrival} now={now} />
       ) : (
         <TimeDisplay arrival={arrival} now={now} />
