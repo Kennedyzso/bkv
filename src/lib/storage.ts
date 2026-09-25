@@ -2,9 +2,15 @@ import {
   ARRIVALS_PER_CONNECTION_OPTIONS,
   DEFAULT_APP_STATE,
 } from '../constants'
-import type { AppState, CommuteGroup, SavedConnection } from '../types'
+import type {
+  AppState,
+  CommuteGroup,
+  PinnedArrival,
+  SavedConnection,
+} from '../types'
 
 const STORAGE_KEY = 'bkv-watch-state-v1'
+const PINNED_STORAGE_KEY = 'bkv-watch-pinned-arrivals-v1'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -81,6 +87,111 @@ function normalizeConnection(value: unknown): SavedConnection | null {
       typeof value.destinationStopName === 'string'
         ? value.destinationStopName
         : undefined,
+  }
+}
+
+function normalizePinnedArrival(value: unknown): PinnedArrival | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const requiredStrings = [
+    'id',
+    'connectionId',
+    'tripId',
+    'routeId',
+    'routeName',
+    'routeType',
+    'stopId',
+    'stopName',
+    'destination',
+    'destinationStopName',
+  ]
+  const requiredNumbers = ['timestamp', 'minutes', 'destinationTimestamp', 'pinnedAt']
+
+  if (
+    requiredStrings.some(
+      (field) => typeof value[field] !== 'string' || value[field] === '',
+    ) ||
+    requiredNumbers.some((field) => typeof value[field] !== 'number') ||
+    typeof value.isRealtime !== 'boolean' ||
+    typeof value.uncertain !== 'boolean'
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id as string,
+    connectionId: value.connectionId as string,
+    tripId: value.tripId as string,
+    routeId: value.routeId as string,
+    routeName: value.routeName as string,
+    routeType: value.routeType as string,
+    routeColor:
+      typeof value.routeColor === 'string' ? value.routeColor : undefined,
+    routeTextColor:
+      typeof value.routeTextColor === 'string'
+        ? value.routeTextColor
+        : undefined,
+    stopId: value.stopId as string,
+    stopName: value.stopName as string,
+    destination: value.destination as string,
+    destinationStopName: value.destinationStopName as string,
+    destinationTimestamp: value.destinationTimestamp as number,
+    timestamp: value.timestamp as number,
+    minutes: value.minutes as number,
+    isRealtime: value.isRealtime as boolean,
+    uncertain: value.uncertain as boolean,
+    pinnedAt: value.pinnedAt as number,
+  }
+}
+
+export type PinnedArrivalsByGroup = Record<string, PinnedArrival[]>
+
+export function loadPinnedArrivals(): PinnedArrivalsByGroup {
+  if (typeof localStorage === 'undefined') {
+    return {}
+  }
+
+  try {
+    const raw = localStorage.getItem(PINNED_STORAGE_KEY)
+    if (!raw) {
+      return {}
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) {
+      return {}
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).map(([groupId, value]) => [
+        groupId,
+        Array.isArray(value)
+          ? value
+              .map(normalizePinnedArrival)
+              .filter(
+                (arrival): arrival is PinnedArrival => arrival !== null,
+              )
+          : [],
+      ]),
+    )
+  } catch {
+    return {}
+  }
+}
+
+export function savePinnedArrivals(
+  pinnedArrivals: PinnedArrivalsByGroup,
+): void {
+  if (typeof localStorage === 'undefined') {
+    return
+  }
+
+  try {
+    localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(pinnedArrivals))
+  } catch {
+    // The app remains usable if storage is blocked or full.
   }
 }
 

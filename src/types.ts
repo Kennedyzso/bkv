@@ -188,9 +188,16 @@ export interface Arrival {
   uncertain: boolean
 }
 
+export interface PinnedArrival extends Arrival {
+  destinationStopName: string
+  destinationTimestamp: number
+  pinnedAt: number
+}
+
 export interface ConnectionDepartures {
   connection: SavedConnection
   arrivals: Arrival[]
+  destinationArrivals?: Arrival[]
   error?: string
 }
 

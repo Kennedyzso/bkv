@@ -922,6 +922,40 @@ h3 {
   font-size: 11px;
 }
 
+.pinned-arrivals-section {
+  margin-bottom: 17px;
+}
+
+.pinned-arrivals-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 3px 10px;
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pinned-arrivals-title svg {
+  flex: 0 0 auto;
+}
+
+.pinned-arrivals-title span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--purple);
+  background: var(--purple-soft);
+  font-size: 10px;
+  line-height: 1;
+}
+
 .load-more-button {
   display: flex;
   align-items: center;
@@ -1046,6 +1080,39 @@ h3 {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.arrival-pin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #a9a5b5;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.arrival-pin-button:hover,
+.arrival-pin-button:focus-visible {
+  color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.arrival-pin-button.is-pinned {
+  color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.arrival-pin-button:disabled {
+  color: #d2cfda;
+  cursor: not-allowed;
 }
 
 .arrival-details {
@@ -1205,9 +1272,9 @@ h3 {
 }
 
 .mini-arrival {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 64px;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   min-height: 52px;
   border-bottom: 1px solid #f0eef4;
@@ -1256,6 +1323,10 @@ h3 {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mini-arrival .arrival-pin-button {
+  flex: 0 0 auto;
 }
 
 .connection-empty,

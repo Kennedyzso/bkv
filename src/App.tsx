@@ -29,7 +29,9 @@ import { BkkApiError } from './lib/bkkApi'
 import {
   createId,
   loadState,
+  loadPinnedArrivals,
   parseGroups,
+  savePinnedArrivals,
   saveState,
   serializeGroups,
 } from './lib/storage'
@@ -47,6 +49,7 @@ import type {
   CommuteGroup,
   ConnectionDepartures,
   GroupDepartures,
+  PinnedArrival,
   RouteReference,
   RouteStopOption,
   RouteStopsResult,
@@ -58,6 +61,7 @@ type ViewMode = 'all' | 'grouped'
 type SettingsTab = 'technical' | 'behavior'
 type GroupedSortMode = 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
+const PINNED_EXPIRY_GRACE_SECONDS = 90
 
 type IconName =
   | 'arrow'
@@ -78,6 +82,7 @@ type IconName =
   | 'train'
   | 'upload'
   | 'menu'
+  | 'pin'
 
 function Icon({
   name,
@@ -118,6 +123,9 @@ function Icon({
       </>
     ),
     plus: <path d="M12 5v14M5 12h14" />,
+    pin: (
+      <path d="M16 9V4h1V2H7v2h1v5c0 1.1-.9 2-2 2v2h5v5l1 1 1-1v-5h5v-2c-1.1 0-2-.9-2-2Z" />
+    ),
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
     refresh: (
       <>
@@ -331,30 +339,30 @@ function mapArrivalsForConnection(
     .sort((a, b) => a.timestamp - b.timestamp)
 }
 
-function attachDestinationTimes(
+function createDestinationConnection(
   connection: SavedConnection,
-  arrivals: Arrival[],
-  destinationResponse: BkkResponse<ArrivalsEntry> | undefined,
-  tripRouteIds: Record<string, string>,
-): Arrival[] {
+): SavedConnection | undefined {
   if (!connection.destinationStopId) {
-    return arrivals
+    return undefined
   }
 
-  const destinationConnection: SavedConnection = {
+  return {
     ...connection,
     id: `${connection.id}-destination`,
     stopId: connection.destinationStopId,
     stopName: connection.destinationStopName ?? connection.destinationStopId,
   }
-  const destinationArrivals = destinationResponse
-    ? mapArrivalsForConnection(
-        destinationConnection,
-        destinationResponse,
-        tripRouteIds,
-        'ARRIVAL',
-      )
-    : []
+}
+
+function attachDestinationTimes(
+  connection: SavedConnection,
+  arrivals: Arrival[],
+  destinationArrivals: Arrival[],
+): Arrival[] {
+  if (!connection.destinationStopId) {
+    return arrivals
+  }
+
   const destinationByTripId = new Map(
     destinationArrivals.map((arrival) => [arrival.tripId, arrival]),
   )
@@ -367,6 +375,44 @@ function attachDestinationTimes(
         connection.destinationStopName ?? connection.destinationStopId,
       destinationTimestamp: destinationArrival?.timestamp,
     }
+  })
+}
+
+function updatePinnedArrivals(
+  pinnedArrivals: PinnedArrival[],
+  refreshedGroup: GroupDepartures,
+  now: number,
+): PinnedArrival[] {
+  const nowSeconds = now / 1000
+
+  return pinnedArrivals.flatMap((pinnedArrival) => {
+    const connectionResult = refreshedGroup.connections.find(
+      (result) => result.connection.id === pinnedArrival.connectionId,
+    )
+    const liveArrival = connectionResult?.arrivals.find(
+      (arrival) => arrival.id === pinnedArrival.id,
+    )
+    const destinationArrival = connectionResult?.destinationArrivals?.find(
+      (arrival) => arrival.tripId === pinnedArrival.tripId,
+    )
+    const destinationTimestamp =
+      destinationArrival?.timestamp ?? pinnedArrival.destinationTimestamp
+
+    if (
+      destinationTimestamp <=
+      nowSeconds - PINNED_EXPIRY_GRACE_SECONDS
+    ) {
+      return []
+    }
+
+    return [
+      {
+        ...pinnedArrival,
+        ...(liveArrival ?? {}),
+        destinationStopName: pinnedArrival.destinationStopName,
+        destinationTimestamp,
+      },
+    ]
   })
 }
 
@@ -388,6 +434,8 @@ function App() {
   const [departures, setDepartures] = useState<Record<string, GroupDepartures>>(
     {},
   )
+  const [pinnedArrivalsByGroup, setPinnedArrivalsByGroup] =
+    useState(loadPinnedArrivals)
   const [additionalArrivalsByGroup, setAdditionalArrivalsByGroup] = useState<
     Record<string, number>
   >({})
@@ -417,6 +465,44 @@ function App() {
       setActiveGroupId(activeGroup.id)
     }
   }, [activeGroup, activeGroupId])
+
+  useEffect(() => {
+    const validConnectionIdsByGroup = new Map(
+      appState.groups.map((group) => [
+        group.id,
+        new Set(group.connections.map((connection) => connection.id)),
+      ]),
+    )
+    const cutoff = Date.now() / 1000 - PINNED_EXPIRY_GRACE_SECONDS
+
+    setPinnedArrivalsByGroup((current) => {
+      let changed = false
+      const next = Object.fromEntries(
+        Object.entries(current).flatMap(([groupId, arrivals]) => {
+          const validConnectionIds = validConnectionIdsByGroup.get(groupId)
+          const filtered = validConnectionIds
+            ? arrivals.filter(
+                (arrival) =>
+                  validConnectionIds.has(arrival.connectionId) &&
+                  arrival.destinationTimestamp > cutoff,
+              )
+            : []
+
+          if (!validConnectionIds || filtered.length !== arrivals.length) {
+            changed = true
+          }
+
+          return filtered.length > 0 ? [[groupId, filtered]] : []
+        }),
+      )
+
+      return changed ? next : current
+    })
+  }, [appState.groups])
+
+  useEffect(() => {
+    savePinnedArrivals(pinnedArrivalsByGroup)
+  }, [pinnedArrivalsByGroup])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 10_000)
@@ -466,16 +552,11 @@ function App() {
               .map(
                 async (connection): Promise<ConnectionDepartures> => {
                   try {
-                    const destinationResponsePromise = connection.destinationStopId
+                    const destinationConnection =
+                      createDestinationConnection(connection)
+                    const destinationResponsePromise = destinationConnection
                       ? getArrivalsForConnection(
-                          {
-                            ...connection,
-                            id: `${connection.id}-destination`,
-                            stopId: connection.destinationStopId,
-                            stopName:
-                              connection.destinationStopName ??
-                              connection.destinationStopId,
-                          },
+                          destinationConnection,
                           appState.settings.apiKey,
                           {
                             stopTimeType: 'ARRIVAL',
@@ -495,6 +576,15 @@ function App() {
                         ),
                         destinationResponsePromise,
                       ])
+                    const destinationArrivals =
+                      destinationResponse && destinationConnection
+                        ? mapArrivalsForConnection(
+                            destinationConnection,
+                            destinationResponse,
+                            tripRouteIds,
+                            'ARRIVAL',
+                          )
+                        : []
                     const arrivals = attachDestinationTimes(
                       connection,
                       mapArrivalsForConnection(
@@ -502,11 +592,10 @@ function App() {
                         response,
                         tripRouteIds,
                       ),
-                      destinationResponse,
-                      tripRouteIds,
+                      destinationArrivals,
                     )
 
-                    return { connection, arrivals }
+                    return { connection, arrivals, destinationArrivals }
                   } catch (error) {
                     return {
                       connection,
@@ -538,6 +627,22 @@ function App() {
         const next = { ...current }
         refreshedGroups.forEach((group) => {
           next[group.groupId] = group
+        })
+        return next
+      })
+      setPinnedArrivalsByGroup((current) => {
+        const next = { ...current }
+        refreshedGroups.forEach((group) => {
+          const updated = updatePinnedArrivals(
+            current[group.groupId] ?? [],
+            group,
+            Date.now(),
+          )
+          if (updated.length > 0) {
+            next[group.groupId] = updated
+          } else {
+            delete next[group.groupId]
+          }
         })
         return next
       })
@@ -634,6 +739,35 @@ function App() {
     }))
   }
 
+  function togglePinnedArrival(groupId: string, arrival: Arrival): void {
+    const destinationStopName = arrival.destinationStopName
+    const destinationTimestamp = arrival.destinationTimestamp
+
+    if (!destinationStopName || !destinationTimestamp) {
+      return
+    }
+
+    setPinnedArrivalsByGroup((current) => {
+      const groupPins = current[groupId] ?? []
+      const isPinned = groupPins.some((pinned) => pinned.id === arrival.id)
+
+      return {
+        ...current,
+        [groupId]: isPinned
+          ? groupPins.filter((pinned) => pinned.id !== arrival.id)
+          : [
+              ...groupPins,
+              {
+                ...arrival,
+                destinationStopName,
+                destinationTimestamp,
+                pinnedAt: Date.now(),
+              },
+            ],
+      }
+    })
+  }
+
   function openGroupModal(groupId: string | null = null): void {
     setEditingGroupId(groupId)
     setModal('group')
@@ -725,6 +859,22 @@ function App() {
           : group,
       ),
     }))
+    if (isEditing) {
+      setPinnedArrivalsByGroup((current) => {
+        const groupPins = current[activeGroup.id] ?? []
+        const remaining = groupPins.filter(
+          (pinned) => pinned.connectionId !== connection.id,
+        )
+        if (remaining.length === groupPins.length) {
+          return current
+        }
+
+        return {
+          ...current,
+          [activeGroup.id]: remaining,
+        }
+      })
+    }
     closeConnectionModal()
     return true
   }
@@ -929,7 +1079,9 @@ function App() {
                 onEditConnection={openConnectionModal}
                 onEditGroup={() => openGroupModal(activeGroup.id)}
                 onLoadMoreArrivals={() => loadMoreArrivals(activeGroup.id)}
+                onTogglePin={togglePinnedArrival}
                 onToggleConnectionVisibility={toggleConnectionVisibility}
+                pinnedArrivals={pinnedArrivalsByGroup[activeGroup.id] ?? []}
                 onViewModeChange={setViewMode}
                 viewMode={viewMode}
               />
@@ -1100,8 +1252,10 @@ function GroupDashboard({
   onEditConnection,
   onEditGroup,
   onLoadMoreArrivals,
+  onTogglePin,
   onToggleConnectionVisibility,
   onViewModeChange,
+  pinnedArrivals,
 }: {
   group: CommuteGroup
   departures?: GroupDepartures
@@ -1116,19 +1270,42 @@ function GroupDashboard({
   onEditConnection: (connectionId: string) => void
   onEditGroup: () => void
   onLoadMoreArrivals: () => void
+  onTogglePin: (groupId: string, arrival: Arrival) => void
   onToggleConnectionVisibility: (
     groupId: string,
     connectionId: string,
   ) => void
   onViewModeChange: (viewMode: ViewMode) => void
+  pinnedArrivals: PinnedArrival[]
 }) {
   const hasData = departures !== undefined
   const [groupedSortMode, setGroupedSortMode] =
     useState<GroupedSortMode>('earliest')
   const hiddenConnectionIds = new Set(group.hiddenConnectionIds ?? [])
-  const visibleDepartures = (departures?.connections ?? []).filter(
-    (result) => !hiddenConnectionIds.has(result.connection.id),
+  const activePinnedArrivals = pinnedArrivals
+    .filter(
+      (arrival) =>
+        !hiddenConnectionIds.has(arrival.connectionId) &&
+        arrival.destinationTimestamp >
+          now / 1000 - PINNED_EXPIRY_GRACE_SECONDS,
+    )
+    .sort((left, right) => {
+      return (
+        left.destinationTimestamp - right.destinationTimestamp ||
+        left.pinnedAt - right.pinnedAt
+      )
+    })
+  const pinnedArrivalIds = new Set(
+    activePinnedArrivals.map((arrival) => arrival.id),
   )
+  const visibleDepartures = (departures?.connections ?? [])
+    .filter((result) => !hiddenConnectionIds.has(result.connection.id))
+    .map((result) => ({
+      ...result,
+      arrivals: result.arrivals.filter(
+        (arrival) => !pinnedArrivalIds.has(arrival.id),
+      ),
+    }))
   const visibleArrivalsLimit = arrivalsPerConnection + additionalArrivals
   const visibleConnections = visibleDepartures.map((result) => ({
     ...result,
@@ -1233,6 +1410,21 @@ function GroupDashboard({
             isRefreshing={isRefreshing}
           />
 
+          {activePinnedArrivals.length > 0 && (
+            <PinnedArrivalsView
+              arrivals={activePinnedArrivals}
+              now={now}
+              onUnpin={(arrivalId) => {
+                const arrival = activePinnedArrivals.find(
+                  (candidate) => candidate.id === arrivalId,
+                )
+                if (arrival) {
+                  onTogglePin(group.id, arrival)
+                }
+              }}
+            />
+          )}
+
           {hasData && visibleDepartures.length === 0 ? (
             <div className="no-arrivals">
               <div className="no-arrivals-icon">
@@ -1249,6 +1441,8 @@ function GroupDashboard({
               arrivals={visibleAllArrivals}
               isRefreshing={isRefreshing || !hasData}
               now={now}
+              onTogglePin={(arrival) => onTogglePin(group.id, arrival)}
+              pinnedArrivalIds={pinnedArrivalIds}
             />
           ) : (
             <GroupedArrivalsView
@@ -1257,6 +1451,8 @@ function GroupDashboard({
               now={now}
               onDeleteConnection={onDeleteConnection}
               onEditConnection={onEditConnection}
+              onTogglePin={(arrival) => onTogglePin(group.id, arrival)}
+              pinnedArrivalIds={pinnedArrivalIds}
               onSortModeChange={setGroupedSortMode}
               sortMode={groupedSortMode}
             />
@@ -1302,16 +1498,52 @@ function DataStatus({
   )
 }
 
+function PinnedArrivalsView({
+  arrivals,
+  now,
+  onUnpin,
+}: {
+  arrivals: PinnedArrival[]
+  now: number
+  onUnpin: (arrivalId: string) => void
+}) {
+  return (
+    <section className="pinned-arrivals-section">
+      <div className="pinned-arrivals-title">
+        <Icon name="pin" size={16} />
+        <strong>Rögzített járatok</strong>
+        <span>{arrivals.length}</span>
+      </div>
+      <div className="arrival-list">
+        {arrivals.map((arrival) => (
+          <ArrivalCard
+            arrival={arrival}
+            isFirst={false}
+            isPinned
+            key={arrival.id}
+            now={now}
+            onTogglePin={() => onUnpin(arrival.id)}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function AllArrivalsView({
   arrivals,
   heading = 'Legkorábban érkezik',
   now,
   isRefreshing,
+  onTogglePin,
+  pinnedArrivalIds,
 }: {
   arrivals: Arrival[]
   heading?: string
   now: number
   isRefreshing: boolean
+  onTogglePin?: (arrival: Arrival) => void
+  pinnedArrivalIds?: Set<string>
 }) {
   if (isRefreshing && arrivals.length === 0) {
     return <LoadingList />
@@ -1341,6 +1573,10 @@ function AllArrivalsView({
           isFirst={index === 0}
           key={arrival.id}
           now={now}
+          onTogglePin={
+            onTogglePin ? () => onTogglePin(arrival) : undefined
+          }
+          isPinned={pinnedArrivalIds?.has(arrival.id) ?? false}
         />
       ))}
     </div>
@@ -1478,6 +1714,8 @@ function GroupedArrivalsView({
   isRefreshing,
   onDeleteConnection,
   onEditConnection,
+  onTogglePin,
+  pinnedArrivalIds,
   onSortModeChange,
   sortMode,
 }: {
@@ -1486,6 +1724,8 @@ function GroupedArrivalsView({
   isRefreshing: boolean
   onDeleteConnection: (connectionId: string) => void
   onEditConnection: (connectionId: string) => void
+  onTogglePin?: (arrival: Arrival) => void
+  pinnedArrivalIds?: Set<string>
   onSortModeChange: (sortMode: GroupedSortMode) => void
   sortMode: GroupedSortMode
 }) {
@@ -1539,6 +1779,8 @@ function GroupedArrivalsView({
             now={now}
             onDelete={() => onDeleteConnection(connectionResult.connection.id)}
             onEdit={() => onEditConnection(connectionResult.connection.id)}
+            onTogglePin={onTogglePin}
+            pinnedArrivalIds={pinnedArrivalIds}
           />
         ))}
       </div>
@@ -1552,12 +1794,16 @@ function ConnectionCard({
   isRefreshing,
   onDelete,
   onEdit,
+  onTogglePin,
+  pinnedArrivalIds,
 }: {
   connectionResult: ConnectionDepartures
   now: number
   isRefreshing: boolean
   onDelete: () => void
   onEdit: () => void
+  onTogglePin?: (arrival: Arrival) => void
+  pinnedArrivalIds?: Set<string>
 }) {
   const { connection, arrivals, error } = connectionResult
   const color = getModeColor(connection.routeType, connection.routeColor)
@@ -1627,7 +1873,15 @@ function ConnectionCard({
       ) : (
         <div className="mini-arrivals">
           {arrivals.map((arrival) => (
-            <MiniArrival arrival={arrival} key={arrival.id} now={now} />
+            <MiniArrival
+              arrival={arrival}
+              isPinned={pinnedArrivalIds?.has(arrival.id) ?? false}
+              key={arrival.id}
+              now={now}
+              onTogglePin={
+                onTogglePin ? () => onTogglePin(arrival) : undefined
+              }
+            />
           ))}
         </div>
       )}
@@ -1639,12 +1893,19 @@ function ArrivalCard({
   arrival,
   now,
   isFirst,
+  isPinned = false,
+  onTogglePin,
 }: {
   arrival: Arrival
   now: number
   isFirst: boolean
+  isPinned?: boolean
+  onTogglePin?: () => void
 }) {
   const color = getModeColor(arrival.routeType, arrival.routeColor)
+  const canPin = Boolean(
+    arrival.destinationStopName && arrival.destinationTimestamp,
+  )
 
   return (
     <article className={`arrival-card ${isFirst ? 'is-first' : ''}`}>
@@ -1656,6 +1917,31 @@ function ArrivalCard({
           type={arrival.routeType}
         />
         {isFirst && <span className="first-label">Következő</span>}
+        {onTogglePin && (
+          <button
+            aria-label={
+              isPinned
+                ? `${arrival.routeName} rögzítésének feloldása`
+                : `${arrival.routeName} rögzítése`
+            }
+            aria-pressed={isPinned}
+            className={`arrival-pin-button ${
+              isPinned ? 'is-pinned' : ''
+            }`}
+            disabled={!canPin}
+            onClick={onTogglePin}
+            title={
+              canPin
+                ? isPinned
+                  ? 'Rögzítés feloldása'
+                  : 'Járat rögzítése'
+                : 'A rögzítéshez célmegálló szükséges'
+            }
+            type="button"
+          >
+            <Icon name="pin" size={16} />
+          </button>
+        )}
       </div>
       <div className="arrival-details">
         <strong>{arrival.destination}</strong>
@@ -1677,12 +1963,30 @@ function ArrivalCard({
           </span>
         )}
       </div>
-      <TimeDisplay arrival={arrival} now={now} />
+      {isPinned ? (
+        <DestinationTimeDisplay arrival={arrival} now={now} />
+      ) : (
+        <TimeDisplay arrival={arrival} now={now} />
+      )}
     </article>
   )
 }
 
-function MiniArrival({ arrival, now }: { arrival: Arrival; now: number }) {
+function MiniArrival({
+  arrival,
+  now,
+  isPinned = false,
+  onTogglePin,
+}: {
+  arrival: Arrival
+  now: number
+  isPinned?: boolean
+  onTogglePin?: () => void
+}) {
+  const canPin = Boolean(
+    arrival.destinationStopName && arrival.destinationTimestamp,
+  )
+
   return (
     <div className="mini-arrival">
       <div>
@@ -1703,6 +2007,31 @@ function MiniArrival({ arrival, now }: { arrival: Arrival; now: number }) {
           </span>
         )}
       </div>
+      {onTogglePin && (
+        <button
+          aria-label={
+            isPinned
+              ? `${arrival.routeName} rögzítésének feloldása`
+              : `${arrival.routeName} rögzítése`
+          }
+          aria-pressed={isPinned}
+          className={`arrival-pin-button ${
+            isPinned ? 'is-pinned' : ''
+          }`}
+          disabled={!canPin}
+          onClick={onTogglePin}
+          title={
+            canPin
+              ? isPinned
+                ? 'Rögzítés feloldása'
+                : 'Járat rögzítése'
+              : 'A rögzítéshez célmegálló szükséges'
+          }
+          type="button"
+        >
+          <Icon name="pin" size={15} />
+        </button>
+      )}
       <TimeDisplay arrival={arrival} now={now} compact />
     </div>
   )
@@ -1726,6 +2055,30 @@ function TimeDisplay({
     <div className={`time-display ${compact ? 'is-compact' : ''}`}>
       <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
       <span>{formatTime(arrival.timestamp)}</span>
+    </div>
+  )
+}
+
+function DestinationTimeDisplay({
+  arrival,
+  now,
+}: {
+  arrival: Arrival
+  now: number
+}) {
+  if (!arrival.destinationTimestamp) {
+    return <TimeDisplay arrival={arrival} now={now} />
+  }
+
+  const minutes = Math.max(
+    0,
+    Math.round((arrival.destinationTimestamp - now / 1000) / 60),
+  )
+
+  return (
+    <div className="time-display is-destination-time">
+      <strong>{minutes === 0 ? 'Most' : `${minutes} perc`}</strong>
+      <span>{formatTime(arrival.destinationTimestamp)}</span>
     </div>
   )
 }
