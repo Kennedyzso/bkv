@@ -59,7 +59,7 @@ import type {
 
 type ViewMode = 'all' | 'grouped'
 type SettingsTab = 'technical' | 'behavior'
-type GroupedSortMode = 'earliest' | 'routeName'
+type GroupedSortMode = 'custom' | 'earliest' | 'routeName'
 type ModalType = 'group' | 'connection' | null
 
 function getPinnedArrivalExpiryTimestamp(arrival: PinnedArrival): number {
@@ -773,6 +773,42 @@ function App() {
     setAdditionalArrivalsByGroup({})
   }
 
+  function moveConnection(
+    groupId: string,
+    connectionId: string,
+    direction: 'up' | 'down',
+  ): void {
+    setAppState((current) => ({
+      ...current,
+      groups: current.groups.map((group) => {
+        if (group.id !== groupId) {
+          return group
+        }
+
+        const connectionIndex = group.connections.findIndex(
+          (connection) => connection.id === connectionId,
+        )
+        const targetIndex =
+          direction === 'up' ? connectionIndex - 1 : connectionIndex + 1
+
+        if (
+          connectionIndex < 0 ||
+          targetIndex < 0 ||
+          targetIndex >= group.connections.length
+        ) {
+          return group
+        }
+
+        const connections = [...group.connections]
+        const movedConnection = connections[connectionIndex]
+        connections[connectionIndex] = connections[targetIndex]
+        connections[targetIndex] = movedConnection
+
+        return { ...group, connections }
+      }),
+    }))
+  }
+
   function togglePinnedArrival(groupId: string, arrival: Arrival): void {
     setPinnedArrivalsByGroup((current) => {
       const groupPins = current[groupId] ?? []
@@ -1104,6 +1140,9 @@ function App() {
                 onEditConnection={openConnectionModal}
                 onEditGroup={() => openGroupModal(activeGroup.id)}
                 onLoadMoreArrivals={() => loadMoreArrivals(activeGroup.id)}
+                onMoveConnection={(connectionId, direction) =>
+                  moveConnection(activeGroup.id, connectionId, direction)
+                }
                 onTogglePin={togglePinnedArrival}
                 onToggleConnectionVisibility={toggleConnectionVisibility}
                 departureQueryTime={departureQueryTime}
@@ -1279,6 +1318,7 @@ function GroupDashboard({
   onEditConnection,
   onEditGroup,
   onLoadMoreArrivals,
+  onMoveConnection,
   onTogglePin,
   onToggleConnectionVisibility,
   onViewModeChange,
@@ -1299,6 +1339,10 @@ function GroupDashboard({
   onEditConnection: (connectionId: string) => void
   onEditGroup: () => void
   onLoadMoreArrivals: () => void
+  onMoveConnection: (
+    connectionId: string,
+    direction: 'up' | 'down',
+  ) => void
   onTogglePin: (groupId: string, arrival: Arrival) => void
   onToggleConnectionVisibility: (
     groupId: string,
@@ -1329,8 +1373,18 @@ function GroupDashboard({
   const pinnedArrivalIds = new Set(
     activePinnedArrivals.map((arrival) => arrival.id),
   )
-  const visibleDepartures = (departures?.connections ?? [])
-    .filter((result) => !hiddenConnectionIds.has(result.connection.id))
+  const departureResultsByConnectionId = new Map(
+    (departures?.connections ?? []).map((result) => [
+      result.connection.id,
+      result,
+    ]),
+  )
+  const visibleDepartures = group.connections
+    .filter((connection) => !hiddenConnectionIds.has(connection.id))
+    .map((connection) => departureResultsByConnectionId.get(connection.id))
+    .filter(
+      (result): result is ConnectionDepartures => result !== undefined,
+    )
     .map((result) => ({
       ...result,
       arrivals: result.arrivals.filter(
@@ -1488,6 +1542,7 @@ function GroupDashboard({
               now={now}
               onDeleteConnection={onDeleteConnection}
               onEditConnection={onEditConnection}
+              onMoveConnection={onMoveConnection}
               onTogglePin={(arrival) => onTogglePin(group.id, arrival)}
               pinnedArrivalIds={pinnedArrivalIds}
               onSortModeChange={setGroupedSortMode}
@@ -1816,6 +1871,7 @@ function GroupedArrivalsView({
   isRefreshing,
   onDeleteConnection,
   onEditConnection,
+  onMoveConnection,
   onTogglePin,
   pinnedArrivalIds,
   onSortModeChange,
@@ -1826,6 +1882,10 @@ function GroupedArrivalsView({
   isRefreshing: boolean
   onDeleteConnection: (connectionId: string) => void
   onEditConnection: (connectionId: string) => void
+  onMoveConnection: (
+    connectionId: string,
+    direction: 'up' | 'down',
+  ) => void
   onTogglePin?: (arrival: Arrival) => void
   pinnedArrivalIds?: Set<string>
   onSortModeChange: (sortMode: GroupedSortMode) => void
@@ -1835,24 +1895,31 @@ function GroupedArrivalsView({
     return <LoadingList />
   }
 
-  const sortedConnections = [...connections].sort((left, right) => {
-    if (sortMode === 'routeName') {
-      return left.connection.routeName.localeCompare(
-        right.connection.routeName,
-        'hu',
-        { numeric: true, sensitivity: 'base' },
-      )
-    }
+  const sortedConnections =
+    sortMode === 'custom'
+      ? connections
+      : [...connections].sort((left, right) => {
+          if (sortMode === 'routeName') {
+            return left.connection.routeName.localeCompare(
+              right.connection.routeName,
+              'hu',
+              { numeric: true, sensitivity: 'base' },
+            )
+          }
 
-    return (
-      (left.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) -
-        (right.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) ||
-      left.connection.routeName.localeCompare(right.connection.routeName, 'hu', {
-        numeric: true,
-        sensitivity: 'base',
-      })
-    )
-  })
+          return (
+            (left.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) -
+              (right.arrivals[0]?.timestamp ?? Number.POSITIVE_INFINITY) ||
+            left.connection.routeName.localeCompare(
+              right.connection.routeName,
+              'hu',
+              {
+                numeric: true,
+                sensitivity: 'base',
+              },
+            )
+          )
+        })
 
   return (
     <>
@@ -1866,6 +1933,7 @@ function GroupedArrivalsView({
             }
             value={sortMode}
           >
+            <option value="custom">Saját sorrend</option>
             <option value="earliest">Legkorábbi</option>
             <option value="routeName">Járat neve</option>
           </select>
@@ -1873,7 +1941,7 @@ function GroupedArrivalsView({
         </span>
       </div>
       <div className="connection-list">
-        {sortedConnections.map((connectionResult) => (
+        {sortedConnections.map((connectionResult, index) => (
           <ConnectionCard
             connectionResult={connectionResult}
             isRefreshing={isRefreshing}
@@ -1881,8 +1949,17 @@ function GroupedArrivalsView({
             now={now}
             onDelete={() => onDeleteConnection(connectionResult.connection.id)}
             onEdit={() => onEditConnection(connectionResult.connection.id)}
+            onMoveDown={() =>
+              onMoveConnection(connectionResult.connection.id, 'down')
+            }
+            onMoveUp={() =>
+              onMoveConnection(connectionResult.connection.id, 'up')
+            }
             onTogglePin={onTogglePin}
             pinnedArrivalIds={pinnedArrivalIds}
+            canMoveDown={index < sortedConnections.length - 1}
+            canMoveUp={index > 0}
+            showReorderControls={sortMode === 'custom'}
           />
         ))}
       </div>
@@ -1896,16 +1973,26 @@ function ConnectionCard({
   isRefreshing,
   onDelete,
   onEdit,
+  onMoveDown,
+  onMoveUp,
   onTogglePin,
   pinnedArrivalIds,
+  canMoveDown,
+  canMoveUp,
+  showReorderControls,
 }: {
   connectionResult: ConnectionDepartures
   now: number
   isRefreshing: boolean
   onDelete: () => void
   onEdit: () => void
+  onMoveDown: () => void
+  onMoveUp: () => void
   onTogglePin?: (arrival: Arrival) => void
   pinnedArrivalIds?: Set<string>
+  canMoveDown: boolean
+  canMoveUp: boolean
+  showReorderControls: boolean
 }) {
   const { connection, arrivals, error } = connectionResult
   const color = getModeColor(connection.routeType, connection.routeColor)
@@ -1931,6 +2018,30 @@ function ConnectionCard({
           </div>
         </div>
         <div className="connection-card-actions">
+          {showReorderControls && (
+            <div className="connection-reorder-actions">
+              <button
+                aria-label={`${connection.routeName} előrébb mozgatása`}
+                className="subtle-icon-button reorder-button"
+                disabled={!canMoveUp}
+                onClick={onMoveUp}
+                title="Előrébb"
+                type="button"
+              >
+                <Icon name="chevron" size={16} />
+              </button>
+              <button
+                aria-label={`${connection.routeName} hátrébb mozgatása`}
+                className="subtle-icon-button reorder-button"
+                disabled={!canMoveDown}
+                onClick={onMoveDown}
+                title="Hátrébb"
+                type="button"
+              >
+                <Icon name="chevron" size={16} />
+              </button>
+            </div>
+          )}
           <button
             aria-label={`${connection.routeName} módosítása`}
             className="subtle-icon-button"

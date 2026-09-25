@@ -1333,6 +1333,31 @@ h3 {
   gap: 2px;
 }
 
+.connection-reorder-actions {
+  display: flex;
+  gap: 0;
+}
+
+.reorder-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.connection-reorder-actions .reorder-button:first-child .icon {
+  transform: rotate(180deg);
+}
+
+.reorder-button:disabled {
+  color: #d3d0dc;
+  cursor: not-allowed;
+}
+
+.reorder-button:hover:not(:disabled) {
+  color: var(--purple);
+  background: var(--purple-soft);
+}
+
 .connection-identity {
   min-width: 0;
   gap: 10px;
