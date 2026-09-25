@@ -994,9 +994,13 @@ h3 {
 
 .departure-time-field input {
   display: block;
+  box-sizing: border-box;
   width: 100%;
+  inline-size: 100%;
   min-width: 0;
+  min-inline-size: 0;
   max-width: 100%;
+  max-inline-size: 100%;
   min-height: 36px;
   padding: 0 8px;
   border: 1px solid #dcd9e5;
@@ -1009,7 +1013,18 @@ h3 {
 }
 
 .departure-time-field input::-webkit-date-and-time-value {
+  display: block;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.departure-time-field input::-webkit-datetime-edit,
+.departure-time-field input::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .departure-time-field input:focus {
@@ -2372,6 +2387,20 @@ h3 {
   .departure-time-picker {
     overflow-x: hidden;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .departure-time-field input {
+    -webkit-appearance: none;
+    appearance: none;
+    overflow: hidden;
+  }
+
+  .departure-time-field input::-webkit-calendar-picker-indicator {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    opacity: 1;
   }
 
   .departure-time-summary {
