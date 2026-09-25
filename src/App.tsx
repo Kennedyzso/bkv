@@ -2135,7 +2135,21 @@ function ConnectionCard({
       ) : arrivals.length === 0 ? (
         <div className="connection-empty">Nincs közelgő indulás</div>
       ) : (
-        <div className="mini-arrivals">
+        <div
+          className={`mini-arrivals ${
+            connection.destinationStopName ? 'has-destination' : ''
+          } ${onTogglePin ? 'has-pin' : ''}`}
+        >
+          <div className="mini-arrivals-heading">
+            <div
+              className={`mini-arrival-schedule ${
+                connection.destinationStopName ? 'has-destination' : ''
+              }`}
+            >
+              <span>Indulás</span>
+              {connection.destinationStopName && <span>Érkezés</span>}
+            </div>
+          </div>
           {arrivals.map((arrival) => (
             <MiniArrival
               arrival={arrival}
@@ -2215,7 +2229,15 @@ function ArrivalCard({
           (!showPinnedJourney || !hasReachedBoardingStop) && (
             <span className="arrival-destination">
               {showPinnedJourney ? (
-                `Cél: ${arrival.destinationStopName}`
+                <>
+                  Cél: {arrival.destinationStopName} ·{' '}
+                  {arrival.destinationTimestamp
+                    ? formatDestinationArrival(
+                        arrival.destinationTimestamp,
+                        now,
+                      )
+                    : 'nincs adat'}
+                </>
               ) : (
                 <>
                   Cél: {arrival.destinationStopName} ·{' '}
@@ -2256,25 +2278,22 @@ function MiniArrival({
         onTogglePin ? 'has-pin' : ''
       }`}
     >
-      <div>
-        <span
-          className={`mini-arrival-status ${
-            arrival.isRealtime ? 'is-realtime' : 'is-scheduled'
-          }`}
-        >
-          {arrival.isRealtime ? '● Valós idő' : '○ Menetrend'}
-        </span>
+      <div
+        className={`mini-arrival-schedule ${
+          arrival.destinationStopName ? 'has-destination' : ''
+        }`}
+      >
+        <MiniScheduleTime
+          isRealtime={arrival.isRealtime}
+          now={now}
+          showStatus
+          timestamp={arrival.timestamp}
+        />
         {arrival.destinationStopName && (
-          <span className="mini-arrival-destination">
-            Érkezés:{' '}
-            {arrival.destinationTimestamp
-              ? formatDestinationArrival(
-                  arrival.destinationTimestamp,
-                  now,
-                  true,
-                )
-              : 'nincs adat'}
-          </span>
+          <MiniScheduleTime
+            now={now}
+            timestamp={arrival.destinationTimestamp}
+          />
         )}
       </div>
       {onTogglePin && (
@@ -2295,7 +2314,47 @@ function MiniArrival({
           <Icon name="pin" size={15} />
         </button>
       )}
-      <TimeDisplay arrival={arrival} now={now} compact />
+    </div>
+  )
+}
+
+function MiniScheduleTime({
+  timestamp,
+  now,
+  isRealtime = false,
+  showStatus = false,
+}: {
+  timestamp?: number
+  now: number
+  isRealtime?: boolean
+  showStatus?: boolean
+}) {
+  const minutes =
+    timestamp === undefined
+      ? undefined
+      : Math.max(0, Math.round((timestamp - now / 1000) / 60))
+
+  return (
+    <div className="mini-arrival-time">
+      <span className="mini-arrival-time-value">
+        {showStatus && (
+          <span
+            aria-label={isRealtime ? 'Valós idejű adat' : 'Menetrend szerint'}
+            className={`mini-arrival-status-dot ${
+              isRealtime ? 'is-realtime' : 'is-scheduled'
+            }`}
+            title={isRealtime ? 'Valós idejű adat' : 'Menetrend szerint'}
+          />
+        )}
+        {timestamp === undefined || minutes === undefined ? (
+          <strong className="is-unavailable">Nincs adat</strong>
+        ) : (
+          <strong>{formatRelativeMinutes(minutes, true)}</strong>
+        )}
+      </span>
+      {timestamp !== undefined && minutes !== undefined && (
+        <span>{formatTime(timestamp)}</span>
+      )}
     </div>
   )
 }

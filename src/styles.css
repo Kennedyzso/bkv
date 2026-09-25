@@ -929,6 +929,9 @@ h3 {
 
 .departure-time-picker {
   display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) minmax(190px, 220px) auto;
   align-items: center;
   gap: 12px;
@@ -977,6 +980,8 @@ h3 {
 
 .departure-time-field {
   display: grid;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   gap: 4px;
 }
@@ -1001,6 +1006,10 @@ h3 {
   background: #fff;
   font: inherit;
   font-size: 12px;
+}
+
+.departure-time-field input::-webkit-date-and-time-value {
+  min-width: 0;
 }
 
 .departure-time-field input:focus {
@@ -1439,9 +1448,33 @@ h3 {
   border-top: 1px solid #f0eef4;
 }
 
+.mini-arrivals-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 7px 0 5px;
+}
+
+.mini-arrivals.has-pin .mini-arrivals-heading {
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+
+.mini-arrivals-heading .mini-arrival-schedule {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mini-arrivals-heading .mini-arrival-schedule > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mini-arrival {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   min-height: 52px;
@@ -1449,7 +1482,7 @@ h3 {
 }
 
 .mini-arrival.has-pin {
-  grid-template-columns: minmax(0, 1fr) 28px 64px;
+  grid-template-columns: minmax(0, 1fr) 28px;
 }
 
 .mini-arrival:last-child {
@@ -1462,42 +1495,62 @@ h3 {
   min-width: 0;
 }
 
-.mini-arrival strong {
-  display: block;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-arrival-status {
-  display: block;
-  margin-top: 3px;
-  font-size: 10px;
-}
-
-.mini-arrival-status.is-realtime {
-  color: #168447;
-  font-weight: 700;
-}
-
-.mini-arrival-status.is-scheduled {
-  color: #8c889b;
-}
-
-.mini-arrival-destination {
-  display: block;
-  max-width: 100%;
+.mini-arrival-schedule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  margin-top: 3px;
+  gap: 14px;
+}
+
+.mini-arrival-schedule.has-destination {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mini-arrival-time {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.mini-arrival-time-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mini-arrival-time strong {
   overflow: hidden;
   color: var(--purple);
-  font-size: 9px;
-  font-weight: 700;
+  font-family: Manrope, sans-serif;
+  font-size: 13px;
+  letter-spacing: -0.03em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mini-arrival-time > span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-arrival-time .is-unavailable {
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.mini-arrival-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8c889b;
+}
+
+.mini-arrival-status-dot.is-realtime {
+  background: #168447;
 }
 
 .mini-arrival .arrival-pin-button {
@@ -2317,6 +2370,7 @@ h3 {
   }
 
   .departure-time-picker {
+    overflow-x: hidden;
     grid-template-columns: minmax(0, 1fr);
   }
 
